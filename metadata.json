@@ -1,0 +1,6 @@
+{
+  "name": "CareerMaster AI Studio",
+  "description": "Ultimate Career System by Hồ Nguyễn Đa Thiện — ATS Resume Builder, JD Match Analyzer, AI Mock Interviewer, High-Impact Rewriter & Personal Branding Engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

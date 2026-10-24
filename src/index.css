@@ -1,0 +1,422 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary: #2563eb;
+    --secondary: #14b8a6;
+    --accent: #f59e0b;
+    --background: #f8fafc;
+    --surface: #ffffff;
+    --text: #0f172a;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text);
+    font-family: 'Be Vietnam Pro', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+}
+
+/* Custom EdTech Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes softFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes gentlePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.9;
+  }
+}
+
+@keyframes progressGrow {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--progress-target, 100%);
+  }
+}
+
+/* Specific Hero Slider Keyframes */
+@keyframes slideContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInSoft {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes cardReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lineDraw {
+  from {
+    stroke-dashoffset: 100;
+    opacity: 0;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+}
+
+@keyframes progressFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes iconPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes chatDot {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 300ms ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-soft-float {
+  animation: softFloat 3.5s ease-in-out infinite;
+}
+
+.animate-gentle-pulse {
+  animation: gentlePulse 2.5s ease-in-out infinite;
+}
+
+/* Slider helper classes */
+.anim-slide-in {
+  animation: slideContentIn 550ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.anim-fade-soft {
+  animation: fadeInSoft 500ms ease-out forwards;
+}
+
+.anim-float-gentle {
+  animation: floatGentle 3s ease-in-out infinite;
+}
+
+.anim-card-reveal {
+  animation: cardReveal 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.anim-icon-pop {
+  animation: iconPop 450ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.anim-line-draw {
+  stroke-dasharray: 100;
+  animation: lineDraw 750ms ease-out forwards;
+}
+
+/* Card Hover effect */
+.card-hover {
+  transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 250ms ease, border-color 250ms ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -6px rgba(37, 99, 235, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.04);
+}
+
+/* Sidebar scrollbar suppression & compact responsiveness */
+.sidebar-nav-scroll {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.sidebar-nav-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Career Buddy Animations */
+@keyframes buddyBlink {
+  0%, 90%, 100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes buddyBreathe {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes buddyWave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-18deg);
+  }
+  75% {
+    transform: rotate(14deg);
+  }
+}
+
+@keyframes buddyHeadTilt {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes buddyCheer {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes starTwinkle {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scale(0.6) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(45deg);
+  }
+}
+
+/* Chị An HR Recruiter Mascot Animations */
+@keyframes chiAnBlink {
+  0%, 92%, 100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes chiAnBreathe {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes chiAnWave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-14deg);
+  }
+  75% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes chiAnHeadTilt {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(2.5deg);
+  }
+}
+
+@keyframes chiAnNod {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(2px) rotate(1.5deg);
+  }
+}
+
+@keyframes chiAnStarTwinkle {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(0.6) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(45deg);
+  }
+}
+
+.anim-chian-blink {
+  animation: chiAnBlink 3.6s ease-in-out infinite;
+  transform-origin: 150px 122px;
+}
+
+.anim-chian-breathe {
+  animation: chiAnBreathe 3.4s ease-in-out infinite;
+  transform-origin: 150px 380px;
+}
+
+.anim-chian-wave {
+  animation: chiAnWave 0.85s ease-in-out infinite;
+  transform-origin: 205px 200px;
+}
+
+.anim-chian-head-tilt {
+  animation: chiAnHeadTilt 2.8s ease-in-out infinite;
+  transform-origin: 150px 175px;
+}
+
+.anim-chian-nod {
+  animation: chiAnNod 1.8s ease-in-out infinite;
+  transform-origin: 150px 175px;
+}
+
+.anim-chian-stars {
+  animation: chiAnStarTwinkle 1.8s ease-in-out infinite;
+}
+
+/* Accessible reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Print styles for ATS Resume */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only-container {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .cv-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    background: white !important;
+    color: #0f172a !important;
+  }
+}
