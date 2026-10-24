@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Printer,
@@ -17,10 +17,13 @@ import {
   BookOpen,
   Award,
   GraduationCap,
-  Briefcase
+  Briefcase,
+  LayoutTemplate
 } from 'lucide-react';
-import { CVData, IndustryType, StudentLevel } from '../types';
+import { CVData, CVPhoto, IndustryType, StudentLevel } from '../types';
 import { SAMPLE_DEFAULT_CV } from '../data/mockData';
+import { CVPhotoUploader } from './CVPhotoUploader';
+import { loadPhotoFromStorage, savePhotoToStorage } from '../utils/photoStorage';
 
 interface ResumeBuilderProps {
   cvData: CVData;
@@ -28,17 +31,55 @@ interface ResumeBuilderProps {
   studentLevel: StudentLevel;
 }
 
+export type CVTemplateType = 'ats' | 'modern' | 'professional' | 'creative';
+
 export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
   cvData,
   setCvData,
   studentLevel,
 }) => {
   const [editorTab, setEditorTab] = useState<'info' | 'skills' | 'projects' | 'education'>('info');
+  const [selectedTemplate, setSelectedTemplate] = useState<CVTemplateType>('ats');
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiPromptModalOpen, setAiPromptModalOpen] = useState(false);
   const [aiGenPrompt, setAiGenPrompt] = useState(
     'Ứng tuyển Thực tập sinh Frontend Developer, sinh viên năm 3-4 CNTT, biết React, TypeScript, HTML/CSS và có đồ án e-commerce.'
   );
+
+  // Restore photo from persistent IndexedDB if not already loaded in cvData
+  useEffect(() => {
+    async function restorePhoto() {
+      if (!cvData.photo) {
+        try {
+          const stored = await loadPhotoFromStorage();
+          if (stored && stored.dataUrl) {
+            setCvData((prev) => ({
+              ...prev,
+              photo: {
+                dataUrl: stored.dataUrl,
+                originalUrl: stored.originalUrl,
+                shape: stored.shape || 'circle',
+                visible: stored.visible ?? true,
+                zoom: stored.zoom,
+                cropX: stored.cropX,
+                cropY: stored.cropY,
+              },
+            }));
+          }
+        } catch (err) {
+          console.warn('Could not restore photo from storage', err);
+        }
+      }
+    }
+    restorePhoto();
+  }, []);
+
+  const handlePhotoChange = (photo: CVPhoto | undefined) => {
+    setCvData((prev) => ({
+      ...prev,
+      photo,
+    }));
+  };
 
   // Inline Bullet enhancer state
   const [selectedBulletInfo, setSelectedBulletInfo] = useState<{
@@ -179,19 +220,77 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
     setEnhancedResult(null);
   };
 
+  const sectionBorderClass =
+    selectedTemplate === 'modern'
+      ? 'border-blue-600'
+      : selectedTemplate === 'creative'
+      ? 'border-indigo-600'
+      : selectedTemplate === 'professional'
+      ? 'border-slate-800'
+      : 'border-slate-900';
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-fade-in">
       {/* Top Toolbar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs no-print">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 pr-3 border-r border-slate-200">
             <span className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
               <FileText className="w-4 h-4 text-blue-600" />
-              Thiết Kế CV Chuẩn ATS
+              Thiết Kế CV
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
-              Bố cục 2 Cột
-            </span>
+          </div>
+
+          {/* Template Switcher */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+            <button
+              type="button"
+              onClick={() => setSelectedTemplate('ats')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                selectedTemplate === 'ats'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'hover:text-slate-900 text-slate-600'
+              }`}
+              title="Mẫu chuẩn hệ thống ATS lọc tự động"
+            >
+              Chuẩn ATS
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTemplate('modern')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                selectedTemplate === 'modern'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'hover:text-slate-900 text-slate-600'
+              }`}
+              title="Mẫu hiện đại với điểm nhấn ảnh tròn và màu xanh chủ đạo"
+            >
+              Hiện đại
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTemplate('professional')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                selectedTemplate === 'professional'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'hover:text-slate-900 text-slate-600'
+              }`}
+              title="Mẫu chuyên nghiệp, trang trọng với ảnh vuông bo góc"
+            >
+              Chuyên nghiệp
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTemplate('creative')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                selectedTemplate === 'creative'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'hover:text-slate-900 text-slate-600'
+              }`}
+              title="Mẫu sáng tạo với dải màu sắc phong cách"
+            >
+              Sáng tạo
+            </button>
           </div>
 
           <button
@@ -280,7 +379,13 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
 
           {/* Tab 1: Personal Info */}
           {editorTab === 'info' && (
-            <div className="space-y-3 text-xs">
+            <div className="space-y-4 text-xs">
+              {/* Photo Uploader Section */}
+              <CVPhotoUploader
+                photo={cvData.photo}
+                onPhotoChange={handlePhotoChange}
+              />
+
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Họ và tên:</label>
                 <input
@@ -534,22 +639,135 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
             id="ats-resume-sheet"
             className="cv-sheet bg-white text-slate-900 rounded-2xl shadow-md w-full max-w-[800px] min-h-[1050px] p-8 sm:p-10 font-sans border border-slate-200/90 text-left transition-all"
           >
-            {/* Header Banner */}
-            <div className="border-b-2 border-slate-900 pb-4 mb-6">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
-                {cvData.contact.fullName}
-              </h1>
-              <p className="text-sm font-bold text-blue-700 tracking-wide mt-0.5 uppercase">
-                {cvData.contact.title}
-              </p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
-                <span>📍 {cvData.contact.location}</span>
-                <span>✉️ {cvData.contact.email}</span>
-                <span>📞 {cvData.contact.phone}</span>
-                {cvData.contact.linkedin && <span>🔗 {cvData.contact.linkedin}</span>}
-                {cvData.contact.github && <span>💻 {cvData.contact.github}</span>}
+            {/* Header Banner - Template Adaptive */}
+            {selectedTemplate === 'modern' ? (
+              <div className="border-b-2 border-blue-600 pb-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 bg-gradient-to-r from-blue-50/60 via-slate-50/30 to-transparent p-4 sm:p-5 rounded-2xl border border-blue-100/70">
+                <div className="flex items-center gap-4 sm:gap-5 flex-1 min-w-0">
+                  {cvData.photo?.dataUrl && cvData.photo?.visible && (
+                    <div className="shrink-0">
+                      <img
+                        src={cvData.photo.dataUrl}
+                        alt={cvData.contact.fullName}
+                        className={`w-20 h-20 sm:w-24 sm:h-24 object-cover border-2 border-blue-600 shadow-sm transition-all ${
+                          cvData.photo.shape === 'rounded' ? 'rounded-2xl' : 'rounded-full'
+                        }`}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
+                      {cvData.contact.fullName}
+                    </h1>
+                    <p className="text-sm font-bold text-blue-600 tracking-wide mt-0.5 uppercase">
+                      {cvData.contact.title}
+                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
+                      <span>📍 {cvData.contact.location}</span>
+                      <span>✉️ {cvData.contact.email}</span>
+                      <span>📞 {cvData.contact.phone}</span>
+                      {cvData.contact.linkedin && <span>🔗 {cvData.contact.linkedin}</span>}
+                      {cvData.contact.github && <span>💻 {cvData.contact.github}</span>}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : selectedTemplate === 'professional' ? (
+              <div className="border-b-2 border-slate-900 pb-5 mb-6 flex items-start justify-between gap-5">
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] tracking-widest text-slate-500 uppercase font-black block mb-0.5">
+                    CURRICULUM VITAE
+                  </span>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
+                    {cvData.contact.fullName}
+                  </h1>
+                  <p className="text-sm font-bold text-slate-700 tracking-wide mt-0.5 uppercase">
+                    {cvData.contact.title}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
+                    <span>📍 {cvData.contact.location}</span>
+                    <span>✉️ {cvData.contact.email}</span>
+                    <span>📞 {cvData.contact.phone}</span>
+                    {cvData.contact.linkedin && <span>🔗 {cvData.contact.linkedin}</span>}
+                    {cvData.contact.github && <span>💻 {cvData.contact.github}</span>}
+                  </div>
+                </div>
+                {cvData.photo?.dataUrl && cvData.photo?.visible && (
+                  <div className="shrink-0">
+                    <img
+                      src={cvData.photo.dataUrl}
+                      alt={cvData.contact.fullName}
+                      className={`w-20 h-20 sm:w-24 sm:h-24 object-cover border-2 border-slate-900 shadow-xs transition-all ${
+                        cvData.photo.shape === 'circle' ? 'rounded-full' : 'rounded-xl'
+                      }`}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : selectedTemplate === 'creative' ? (
+              <div className="border-b-2 border-indigo-600 pb-5 mb-6 flex items-center justify-between gap-5 bg-gradient-to-r from-indigo-50/70 via-indigo-50/20 to-transparent p-4 sm:p-5 rounded-2xl border border-indigo-100">
+                <div className="flex items-center gap-4 sm:gap-5 flex-1 min-w-0">
+                  {cvData.photo?.dataUrl && cvData.photo?.visible && (
+                    <div className="shrink-0">
+                      <img
+                        src={cvData.photo.dataUrl}
+                        alt={cvData.contact.fullName}
+                        className={`w-20 h-20 sm:w-24 sm:h-24 object-cover border-2 border-indigo-600 shadow-md transition-all ${
+                          cvData.photo.shape === 'rounded' ? 'rounded-2xl' : 'rounded-full'
+                        }`}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="inline-block px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                      Ứng viên Sáng tạo
+                    </div>
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
+                      {cvData.contact.fullName}
+                    </h1>
+                    <p className="text-sm font-bold text-indigo-700 tracking-wide mt-0.5 uppercase">
+                      {cvData.contact.title}
+                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
+                      <span>📍 {cvData.contact.location}</span>
+                      <span>✉️ {cvData.contact.email}</span>
+                      <span>📞 {cvData.contact.phone}</span>
+                      {cvData.contact.linkedin && <span>🔗 {cvData.contact.linkedin}</span>}
+                      {cvData.contact.github && <span>💻 {cvData.contact.github}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* ATS Standard Template */
+              <div className="border-b-2 border-slate-900 pb-4 mb-6 flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
+                    {cvData.contact.fullName}
+                  </h1>
+                  <p className="text-sm font-bold text-blue-700 tracking-wide mt-0.5 uppercase">
+                    {cvData.contact.title}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
+                    <span>📍 {cvData.contact.location}</span>
+                    <span>✉️ {cvData.contact.email}</span>
+                    <span>📞 {cvData.contact.phone}</span>
+                    {cvData.contact.linkedin && <span>🔗 {cvData.contact.linkedin}</span>}
+                    {cvData.contact.github && <span>💻 {cvData.contact.github}</span>}
+                  </div>
+                </div>
+                {cvData.photo?.dataUrl && cvData.photo?.visible && (
+                  <div className="shrink-0">
+                    <img
+                      src={cvData.photo.dataUrl}
+                      alt={cvData.contact.fullName}
+                      className={`w-20 h-20 sm:w-22 sm:h-22 object-cover border border-slate-300 shadow-xs transition-all ${
+                        cvData.photo.shape === 'circle' ? 'rounded-full' : 'rounded-lg'
+                      }`}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 2-COLUMN ATS GRID */}
             <div className="grid grid-cols-12 gap-6">
@@ -557,7 +775,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
               <div className="col-span-12 md:col-span-4 space-y-5 border-r-0 md:border-r border-slate-200 pr-0 md:pr-4">
                 {/* CORE SKILLS */}
                 <div>
-                  <h2 className="text-xs font-black tracking-wider uppercase text-slate-900 border-b border-slate-900 pb-1 mb-2.5">
+                  <h2 className={`text-xs font-black tracking-wider uppercase text-slate-900 border-b ${sectionBorderClass} pb-1 mb-2.5`}>
                     Kỹ năng chuyên môn
                   </h2>
 
@@ -603,7 +821,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
                 {/* CERTIFICATIONS */}
                 {cvData.certifications && cvData.certifications.length > 0 && (
                   <div>
-                    <h2 className="text-xs font-black tracking-wider uppercase text-slate-900 border-b border-slate-900 pb-1 mb-2">
+                    <h2 className={`text-xs font-black tracking-wider uppercase text-slate-900 border-b ${sectionBorderClass} pb-1 mb-2`}>
                       Chứng chỉ Quốc tế
                     </h2>
                     <div className="space-y-2 text-xs">
@@ -622,7 +840,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
                 {/* LANGUAGES */}
                 {cvData.languages && cvData.languages.length > 0 && (
                   <div>
-                    <h2 className="text-xs font-black tracking-wider uppercase text-slate-900 border-b border-slate-900 pb-1 mb-2">
+                    <h2 className={`text-xs font-black tracking-wider uppercase text-slate-900 border-b ${sectionBorderClass} pb-1 mb-2`}>
                       Ngoại ngữ
                     </h2>
                     <ul className="text-xs text-slate-600 space-y-1">
@@ -641,7 +859,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
               <div className="col-span-12 md:col-span-8 space-y-5">
                 {/* PROFESSIONAL SUMMARY */}
                 <div>
-                  <h2 className="text-xs font-black tracking-wider uppercase text-slate-900 border-b border-slate-900 pb-1 mb-2">
+                  <h2 className={`text-xs font-black tracking-wider uppercase text-slate-900 border-b ${sectionBorderClass} pb-1 mb-2`}>
                     Tóm tắt chuyên môn (Professional Summary)
                   </h2>
                   <p className="text-xs text-slate-700 leading-relaxed text-justify">
@@ -651,7 +869,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
 
                 {/* EDUCATION */}
                 <div>
-                  <h2 className="text-xs font-black tracking-wider uppercase text-slate-900 border-b border-slate-900 pb-1 mb-2">
+                  <h2 className={`text-xs font-black tracking-wider uppercase text-slate-900 border-b ${sectionBorderClass} pb-1 mb-2`}>
                     Học vấn
                   </h2>
                   <div className="space-y-2">
@@ -681,7 +899,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
 
                 {/* PROJECTS (PRACTICAL EXPERIENCE) */}
                 <div>
-                  <div className="flex items-center justify-between border-b border-slate-900 pb-1 mb-2">
+                  <div className={`flex items-center justify-between border-b ${sectionBorderClass} pb-1 mb-2`}>
                     <h2 className="text-xs font-black tracking-wider uppercase text-slate-900">
                       Đồ án tiêu biểu (Kinh nghiệm thực tiễn)
                     </h2>
@@ -731,7 +949,7 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
                 {/* ACTIVITIES & ACHIEVEMENTS */}
                 {cvData.activities && cvData.activities.length > 0 && (
                   <div>
-                    <h2 className="text-xs font-black tracking-wider uppercase text-slate-900 border-b border-slate-900 pb-1 mb-2">
+                    <h2 className={`text-xs font-black tracking-wider uppercase text-slate-900 border-b ${sectionBorderClass} pb-1 mb-2`}>
                       Hoạt động & Thành tích
                     </h2>
                     <div className="space-y-1.5 text-xs text-slate-700">

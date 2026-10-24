@@ -25,6 +25,16 @@ export type AppTab =
   | 'interview-practice'
   | 'career-roadmap';
 
+export interface CVPhoto {
+  dataUrl: string;
+  originalUrl?: string;
+  shape: 'circle' | 'rounded';
+  visible: boolean;
+  zoom?: number;
+  cropX?: number;
+  cropY?: number;
+}
+
 export interface CVData {
   contact: {
     fullName: string;
@@ -36,6 +46,7 @@ export interface CVData {
     github?: string;
     portfolio?: string;
   };
+  photo?: CVPhoto;
   summary: string;
   skills: {
     core: string[];
