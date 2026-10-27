@@ -26,7 +26,9 @@ import {
   Type,
   Maximize2,
   Sliders,
-  FileDown
+  FileDown,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { CVData, CVPhoto, IndustryType, StudentLevel, CVTemplateId, CVThemeConfig } from '../types';
 import { SAMPLE_DEFAULT_CV } from '../data/mockData';
@@ -102,6 +104,7 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
   const [isMyCvsModalOpen, setIsMyCvsModalOpen] = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [statusNotice, setStatusNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Inline Bullet enhancer state
   const [selectedBulletInfo, setSelectedBulletInfo] = useState<{
@@ -207,10 +210,37 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
   const handleSelectTemplate = (id: CVTemplateId) => {
     setSelectedTemplate(id);
     const meta = getTemplateById(id);
+    const newColor = meta.defaultThemeColor || themeConfig.primaryColor;
     setThemeConfig((prev) => ({
       ...prev,
-      primaryColor: meta.defaultThemeColor,
+      primaryColor: newColor,
     }));
+
+    if (currentUser && activeCvId) {
+      saveCV(currentUser.uid, {
+        id: activeCvId,
+        uid: currentUser.uid,
+        cvName: activeCvName,
+        templateId: id,
+        targetRole: cvData.contact.title || 'Thực tập sinh',
+        cvData,
+        themeConfig: {
+          ...themeConfig,
+          primaryColor: newColor,
+        },
+        showPhoto: themeConfig.showPhoto ?? (cvData.photo?.visible ?? true),
+        photoShape: themeConfig.photoShape || cvData.photo?.shape || 'circle',
+        isDefault: cvList.length <= 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }).catch((e) => console.error('Auto save template to cloud error', e));
+    }
+
+    setStatusNotice({
+      type: 'success',
+      message: `Đã áp dụng mẫu "${meta.name}" và giữ nguyên toàn bộ dữ liệu của bạn!`,
+    });
+    setTimeout(() => setStatusNotice(null), 3500);
     setMainTab('editor');
   };
 
@@ -264,8 +294,10 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
           .toString()
           .padStart(2, '0')}`
       );
+      setStatusNotice({ type: 'success', message: 'Đã lưu CV lên Cloud Firestore thành công!' });
+      setTimeout(() => setStatusNotice(null), 3500);
     } catch (err: any) {
-      alert(`Lỗi khi lưu CV lên đám mây: ${err.message || 'Có lỗi xảy ra'}`);
+      setStatusNotice({ type: 'error', message: `Lỗi khi lưu CV lên đám mây: ${err.message || 'Có lỗi xảy ra'}` });
     } finally {
       setIsSavingCloud(false);
     }
@@ -292,8 +324,10 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
   const handleExportWord = () => {
     try {
       exportCvToWord(cvData, currentTemplateMeta.name, 'docx');
+      setStatusNotice({ type: 'success', message: 'Đang tải file Word (.docx) về máy của bạn...' });
+      setTimeout(() => setStatusNotice(null), 3500);
     } catch (err: any) {
-      alert(`Lỗi khi xuất Word: ${err?.message || 'Có lỗi xảy ra'}`);
+      setStatusNotice({ type: 'error', message: `Lỗi khi xuất Word: ${err?.message || 'Có lỗi xảy ra'}` });
     }
   };
 
@@ -315,8 +349,10 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
       const data: CVData = await res.json();
       setCvData(data);
       setAiPromptModalOpen(false);
+      setStatusNotice({ type: 'success', message: 'Đã tạo dàn ý CV chuẩn ATS thành công bằng AI!' });
+      setTimeout(() => setStatusNotice(null), 3500);
     } catch (err: any) {
-      alert(`Lỗi: ${err?.message || 'Có lỗi xảy ra khi tạo CV'}`);
+      setStatusNotice({ type: 'error', message: `Lỗi: ${err?.message || 'Có lỗi xảy ra khi tạo CV'}` });
     } finally {
       setIsGenerating(false);
     }
@@ -374,7 +410,34 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5 animate-fade-in text-left">
+      {/* In-Page Status Notification Banner */}
+      {statusNotice && (
+        <div
+          className={`p-3.5 rounded-2xl text-xs flex items-center justify-between gap-3 animate-fade-in font-bold shadow-xs ${
+            statusNotice.type === 'success'
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border border-rose-200 text-rose-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {statusNotice.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{statusNotice.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusNotice(null)}
+            className="text-slate-400 hover:text-slate-700 cursor-pointer p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Main Navigation Tabs */}
       <div className="flex border-b border-slate-200 gap-2 no-print">
         <button
@@ -1273,7 +1336,7 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
             {/* A4 Document Container */}
             <div
               id="ats-resume-sheet"
-              className="cv-sheet bg-white text-slate-900 rounded-2xl shadow-md w-full max-w-[800px] min-h-[1050px] p-0 font-sans border border-slate-200/90 text-left transition-all overflow-hidden"
+              className="cv-sheet bg-white text-slate-900 rounded-2xl shadow-md w-full max-w-[800px] min-h-[1050px] p-0 font-sans border border-slate-200/90 text-left transition-all"
             >
               <CVRenderer
                 cvData={cvData}
