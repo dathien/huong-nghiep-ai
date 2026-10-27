@@ -103,6 +103,13 @@ service cloud.firestore {
 
         allow delete: if isOwner(userId) || isAdmin();
       }
+
+      // Nested Competency Profile: users/{userId}/profile/{profileId}
+      match /profile/{profileId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create, update: if isOwner(userId) && isValidId(profileId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Extended User Profiles Collection: user_profiles/{userId}

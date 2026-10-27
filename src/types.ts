@@ -260,3 +260,67 @@ export interface RoadmapMilestone {
     completed: boolean;
   }[];
 }
+
+export interface CompetencyEducation {
+  id: string;
+  school: string;
+  degreeLevel: string;
+  major?: string;
+  startDate: string;
+  endDate: string;
+  isCurrent?: boolean;
+  gpa?: string;
+  coursework?: string[];
+  achievements?: string[];
+}
+
+export type CompetencySkillCategory =
+  | 'technical'
+  | 'soft'
+  | 'language'
+  | 'office'
+  | 'vocational';
+
+export type CompetencyProficiency =
+  | 'beginner'
+  | 'intermediate'
+  | 'proficient'
+  | 'expert';
+
+export interface CompetencySkill {
+  id: string;
+  name: string;
+  category: CompetencySkillCategory;
+  proficiency: CompetencyProficiency;
+  evidence?: string;
+}
+
+export interface CompetencyProject {
+  id: string;
+  name: string;
+  role: string;
+  period: string;
+  description: string;
+  techStack: string[];
+  results: string[];
+  link?: string;
+}
+
+export interface CompetencyCertificate {
+  id: string;
+  name: string;
+  issuer: string;
+  issueDate: string;
+  expiryDate?: string;
+  credentialId?: string;
+  verificationUrl?: string;
+}
+
+export interface CompetencyProfileData {
+  education: CompetencyEducation[];
+  skills: CompetencySkill[];
+  projects: CompetencyProject[];
+  certificates: CompetencyCertificate[];
+  updatedAt?: string;
+}
+

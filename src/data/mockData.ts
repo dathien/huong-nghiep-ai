@@ -1,4 +1,4 @@
-import { CVData, CareerTrack, RoadmapMilestone } from '../types';
+import { CVData, CareerTrack, RoadmapMilestone, CompetencyProfileData } from '../types';
 
 export const SAMPLE_DEFAULT_CV: CVData = {
   contact: {
@@ -278,3 +278,133 @@ export const DEFAULT_ROADMAP_MILESTONES: RoadmapMilestone[] = [
     ],
   },
 ];
+
+export const SAMPLE_COMPETENCY_PROFILE: CompetencyProfileData = {
+  education: [
+    {
+      id: 'edu-sample-1',
+      school: 'Trường Đại học Công nghệ Thông tin - ĐHQG TP.HCM',
+      degreeLevel: 'Sinh viên đại học',
+      major: 'Kỹ thuật Phần mềm (Software Engineering)',
+      startDate: '09/2022',
+      endDate: '06/2026',
+      isCurrent: true,
+      gpa: '3.65 / 4.0',
+      coursework: ['Lập trình Web nâng cao', 'Cấu trúc dữ liệu & Giải thuật', 'Kiểm thử phần mềm', 'Hệ quản trị CSDL'],
+      achievements: ['Học bổng Khuyến khích Học tập 3 kỳ liên tiếp', 'Top 5% sinh viên tiêu biểu khóa 2022'],
+    },
+    {
+      id: 'edu-sample-2',
+      school: 'Trường THPT Chuyên Lê Hồng Phong',
+      degreeLevel: 'Học sinh THPT',
+      major: 'Chuyên Tin học',
+      startDate: '09/2019',
+      endDate: '06/2022',
+      isCurrent: false,
+      gpa: '9.2 / 10',
+      achievements: ['Giải Nhì Học sinh Giỏi cấp Thành phố môn Tin học', 'Học sinh Xuất sắc 3 năm liền'],
+    },
+  ],
+  skills: [
+    {
+      id: 'sk-sample-1',
+      name: 'TypeScript & React 19',
+      category: 'technical',
+      proficiency: 'proficient',
+      evidence: 'Đã xây dựng 3 đồ án thực tiễn hoàn chỉnh, tối ưu component và state management với Redux Toolkit.',
+    },
+    {
+      id: 'sk-sample-2',
+      name: 'HTML5, CSS3 & Tailwind CSS',
+      category: 'technical',
+      proficiency: 'expert',
+      evidence: 'Thiết kế giao diện responsive chuẩn mobile-first, tuân thủ WCAG accessibility và tối ưu animations mượt mà.',
+    },
+    {
+      id: 'sk-sample-3',
+      name: 'RESTful API & Node.js',
+      category: 'technical',
+      proficiency: 'intermediate',
+      evidence: 'Phát triển backend Express, tích hợp xác thực JWT và kết nối PostgreSQL/Firestore.',
+    },
+    {
+      id: 'sk-sample-4',
+      name: 'Làm việc nhóm & Giao tiếp (Agile/Scrum)',
+      category: 'soft',
+      proficiency: 'proficient',
+      evidence: 'Đảm nhận vai trò Scrum Master cho nhóm 5 thành viên trong đồ án chuyên ngành, bàn giao đúng hạn 100%.',
+    },
+    {
+      id: 'sk-sample-5',
+      name: 'Tư duy giải quyết vấn đề (Problem Solving)',
+      category: 'soft',
+      proficiency: 'proficient',
+      evidence: 'Thường xuyên luyện tập thuật toán trên LeetCode (>150 bài), giải quyết bug kỹ thuật độc lập.',
+    },
+    {
+      id: 'sk-sample-6',
+      name: 'Tiếng Anh chuyên ngành (IELTS 6.5)',
+      category: 'language',
+      proficiency: 'proficient',
+      evidence: 'Đọc hiểu tài liệu kỹ thuật quốc tế (MDN, React Docs), giao tiếp và thuyết trình đồ án bằng tiếng Anh.',
+    },
+    {
+      id: 'sk-sample-7',
+      name: 'Git, GitHub & VS Code',
+      category: 'office',
+      proficiency: 'proficient',
+      evidence: 'Sử dụng Git flow, quản lý pull requests, resolve merge conflicts và thiết lập GitHub Actions cơ bản.',
+    },
+  ],
+  projects: [
+    {
+      id: 'proj-sample-1',
+      name: 'EcoMart — Nền tảng Thương Mại Điện Tử Sinh Viên',
+      role: 'Trưởng nhóm Frontend & UI/UX',
+      period: '09/2025 - 12/2025',
+      description: 'Sàn thương mại điện tử giúp sinh viên trao đổi giáo trình, đồ dùng học tập với tốc độ tải trang dưới 1.2s.',
+      techStack: ['React', 'TypeScript', 'Tailwind CSS', 'Redux Toolkit', 'REST API'],
+      results: [
+        'Xây dựng hơn 25 component tái sử dụng, giảm 30% kích thước bundle.',
+        'Đạt điểm 9.2/10 môn Đồ án Chuyên ngành.',
+        'Thu hút 800+ lượt trải nghiệm trong tuần lễ đổi mới sáng tạo.',
+      ],
+      link: 'https://github.com/minhanh-dev/ecomart-web',
+    },
+    {
+      id: 'proj-sample-2',
+      name: 'EduQuiz — Hệ Thống Ôn Thi Trực Tuyến Học Sinh THPT',
+      role: 'Full-Stack Developer',
+      period: '02/2025 - 06/2025',
+      description: 'Ứng dụng luyện thi trắc nghiệm trực tuyến có đếm ngược thời gian và phân tích phổ điểm tự động.',
+      techStack: ['React', 'Node.js', 'PostgreSQL', 'Tailwind CSS'],
+      results: [
+        'Xây dựng ngân hàng 2,500+ câu hỏi trắc nghiệm chuẩn Bộ GD&ĐT.',
+        'Phục vụ hơn 3,000 lượt làm bài thi thử các môn Toán và Lý.',
+      ],
+      link: 'https://github.com/minhanh-dev/eduquiz-platform',
+    },
+  ],
+  certificates: [
+    {
+      id: 'cert-sample-1',
+      name: 'Meta Front-End Developer Professional Certificate',
+      issuer: 'Meta / Coursera',
+      issueDate: '01/2025',
+      expiryDate: '',
+      credentialId: 'META-FED-2025-9988',
+      verificationUrl: 'https://coursera.org/verify/professional-cert/minhanh',
+    },
+    {
+      id: 'cert-sample-2',
+      name: 'Google Cloud Computing Foundations',
+      issuer: 'Google Cloud Skills Boost',
+      issueDate: '08/2024',
+      expiryDate: '',
+      credentialId: 'GCCF-VN-887766',
+      verificationUrl: 'https://skillsboost.google/public_profiles/minhanh',
+    },
+  ],
+  updatedAt: new Date().toISOString(),
+};
+
