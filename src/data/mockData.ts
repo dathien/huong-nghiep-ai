@@ -1,5 +1,37 @@
 import { CVData, CareerTrack, RoadmapMilestone, CompetencyProfileData } from '../types';
 
+export const createBlankCVData = (userInfo?: {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+}): CVData => ({
+  contact: {
+    fullName: userInfo?.fullName || '',
+    title: '',
+    email: userInfo?.email || '',
+    phone: userInfo?.phone || '',
+    location: userInfo?.location || '',
+    linkedin: '',
+    github: '',
+    portfolio: '',
+  },
+  summary: '',
+  skills: {
+    core: [],
+    technical: [],
+    tools: [],
+    soft: [],
+  },
+  languages: [],
+  certifications: [],
+  education: [],
+  projects: [],
+  experience: [],
+  activities: [],
+  achievements: [],
+});
+
 export const SAMPLE_DEFAULT_CV: CVData = {
   contact: {
     fullName: 'Nguyễn Minh Anh',

@@ -88,7 +88,16 @@ export interface CVTemplateMeta {
 
 export interface CVThemeConfig {
   primaryColor: string;
-  fontFamily: 'font-sans' | 'font-serif' | 'font-mono' | 'font-vietnam';
+  fontFamily:
+    | 'font-inter'
+    | 'font-arial'
+    | 'font-roboto'
+    | 'font-times'
+    | 'font-calibri'
+    | 'font-vietnam'
+    | 'font-sans'
+    | 'font-serif'
+    | 'font-mono';
   fontSize: 'compact' | 'standard' | 'relaxed';
   showPhoto: boolean;
   photoShape: 'circle' | 'rounded' | 'square';

@@ -15,8 +15,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { CVDoc, duplicateCV, renameCV, setDefaultCV, deleteCV, createCV } from '../services/cvService';
-import { CVData } from '../types';
-import { SAMPLE_DEFAULT_CV } from '../data/mockData';
+import { CVData, CVTemplateId } from '../types';
+import { createBlankCVData } from '../data/mockData';
+import { getTemplateDisplayName, CV_TEMPLATES } from '../templates/templateRegistry';
 
 interface MyCVManagerModalProps {
   isOpen: boolean;
@@ -41,7 +42,8 @@ export const MyCVManagerModal: React.FC<MyCVManagerModalProps> = ({
   const [editNameValue, setEditNameValue] = useState('');
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newCvName, setNewCvName] = useState('');
-  const [newCvTemplate, setNewCvTemplate] = useState<'ats' | 'modern' | 'professional' | 'creative'>('ats');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [newCvTemplate, setNewCvTemplate] = useState<CVTemplateId | string>('student-starter');
   const [loadingAction, setLoadingAction] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -90,18 +92,17 @@ export const MyCVManagerModal: React.FC<MyCVManagerModalProps> = ({
     }
   };
 
-  const handleDelete = async (cvId: string, cvName: string) => {
+  const handleDelete = async (cvId: string) => {
     if (cvList.length <= 1) {
       setErrorMsg('Bạn cần giữ ít nhất 1 bản CV trong tài khoản.');
-      return;
-    }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa bản CV "${cvName}" không?`)) {
+      setConfirmDeleteId(null);
       return;
     }
 
     try {
       setLoadingAction(true);
       await deleteCV(uid, cvId);
+      setConfirmDeleteId(null);
       if (activeCvId === cvId) {
         const remaining = cvList.filter((c) => c.id !== cvId);
         if (remaining.length > 0) {
@@ -121,13 +122,14 @@ export const MyCVManagerModal: React.FC<MyCVManagerModalProps> = ({
 
     try {
       setLoadingAction(true);
-      const blankData: CVData = {
-        ...SAMPLE_DEFAULT_CV,
-        contact: {
-          ...SAMPLE_DEFAULT_CV.contact,
-          title: newCvName.trim(),
-        },
-      };
+      const blankData: CVData = createBlankCVData({
+        fullName: currentCvData.contact.fullName,
+        email: currentCvData.contact.email,
+        phone: currentCvData.contact.phone,
+        location: currentCvData.contact.location,
+      });
+      blankData.contact.title = newCvName.trim();
+
       const created = await createCV(uid, newCvName.trim(), newCvTemplate, blankData, false);
       if (created) {
         onSelectCV(created);
@@ -250,13 +252,14 @@ export const MyCVManagerModal: React.FC<MyCVManagerModalProps> = ({
                   </label>
                   <select
                     value={newCvTemplate}
-                    onChange={(e) => setNewCvTemplate(e.target.value as any)}
+                    onChange={(e) => setNewCvTemplate(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium cursor-pointer"
                   >
-                    <option value="ats">Chuẩn ATS (Tối ưu quét tự động)</option>
-                    <option value="modern">Hiện đại (Ảnh tròn, dải xanh)</option>
-                    <option value="professional">Chuyên nghiệp (Ảnh bo góc)</option>
-                    <option value="creative">Sáng tạo (Phong cách nổi bật)</option>
+                    {CV_TEMPLATES.map((tmpl, idx) => (
+                      <option key={tmpl.id} value={tmpl.id}>
+                        Mẫu {idx + 1 < 10 ? '0' + (idx + 1) : idx + 1} – {tmpl.name} ({tmpl.categoryName})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -348,14 +351,7 @@ export const MyCVManagerModal: React.FC<MyCVManagerModalProps> = ({
 
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                           <span className="font-semibold text-slate-700">
-                            Mẫu:{' '}
-                            {cv.templateId === 'ats'
-                              ? 'Chuẩn ATS'
-                              : cv.templateId === 'modern'
-                              ? 'Hiện đại'
-                              : cv.templateId === 'professional'
-                              ? 'Chuyên nghiệp'
-                              : 'Sáng tạo'}
+                            Mẫu: {getTemplateDisplayName(cv.templateId)}
                           </span>
                           <span>•</span>
                           <span className="flex items-center gap-1">
@@ -413,14 +409,34 @@ export const MyCVManagerModal: React.FC<MyCVManagerModalProps> = ({
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(cv.id, cv.cvName)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="Xóa bản CV"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {confirmDeleteId === cv.id ? (
+                          <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 p-1 rounded-xl">
+                            <span className="text-[11px] text-rose-700 font-bold px-1">Xóa?</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(cv.id)}
+                              className="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 cursor-pointer"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-0.5 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 cursor-pointer"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(cv.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Xóa bản CV"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

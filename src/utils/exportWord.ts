@@ -7,7 +7,11 @@ import { CVData } from '../types';
 export const exportCvToWord = (
   cvData: CVData,
   templateName: string = 'CareerMaster CV',
-  extension: 'docx' | 'doc' = 'docx'
+  extension: 'docx' | 'doc' = 'docx',
+  options?: {
+    fontFamily?: string;
+    primaryColor?: string;
+  }
 ) => {
   const {
     contact,
@@ -26,11 +30,22 @@ export const exportCvToWord = (
   const showPhoto = photo?.dataUrl && photo?.visible;
   const photoBorderRadius = photo?.shape === 'circle' ? '50%' : photo?.shape === 'rounded' ? '12px' : '0px';
 
+  let wordFont = "'Calibri', 'Segoe UI', Arial, sans-serif";
+  if (options?.fontFamily) {
+    if (options.fontFamily.includes('inter')) wordFont = "'Inter', Arial, sans-serif";
+    else if (options.fontFamily.includes('arial')) wordFont = "Arial, Helvetica, sans-serif";
+    else if (options.fontFamily.includes('roboto')) wordFont = "'Roboto', Arial, sans-serif";
+    else if (options.fontFamily.includes('times')) wordFont = "'Times New Roman', Times, serif";
+    else if (options.fontFamily.includes('calibri')) wordFont = "Calibri, 'Segoe UI', Arial, sans-serif";
+  }
+
+  const primaryColor = options?.primaryColor || '#2563eb';
+
   const content = `
     <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head>
       <meta charset='utf-8'>
-      <title>${contact.fullName} - CV</title>
+      <title>${contact.fullName || 'Ung_Vien'} - CV</title>
       <style>
         @page {
           size: A4;
@@ -38,23 +53,23 @@ export const exportCvToWord = (
           mso-page-orientation: portrait;
         }
         body {
-          font-family: 'Calibri', 'Segoe UI', 'Arial', sans-serif;
-          font-size: 11pt;
+          font-family: ${wordFont};
+          font-size: 10.5pt;
           line-height: 1.4;
           color: #1e293b;
         }
         h1 {
           font-size: 20pt;
           font-weight: bold;
-          color: #1e40af;
+          color: ${primaryColor};
           margin: 0;
           padding: 0;
           text-transform: uppercase;
         }
         .title {
-          font-size: 13pt;
+          font-size: 12.5pt;
           font-weight: bold;
-          color: #2563eb;
+          color: ${primaryColor};
           margin-top: 2pt;
           margin-bottom: 6pt;
           text-transform: uppercase;
@@ -67,7 +82,7 @@ export const exportCvToWord = (
         .header-table {
           width: 100%;
           border-collapse: collapse;
-          border-bottom: 2pt solid #2563eb;
+          border-bottom: 2pt solid ${primaryColor};
           padding-bottom: 10pt;
           margin-bottom: 14pt;
         }

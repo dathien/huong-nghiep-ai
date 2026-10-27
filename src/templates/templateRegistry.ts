@@ -430,6 +430,30 @@ export const getTemplateById = (id: string): CVTemplateMeta => {
   return found || CV_TEMPLATES[0];
 };
 
+// Helper to get 1-based sequential index (1 to 24)
+export const getTemplateIndex = (id: string): number => {
+  if (id === 'ats') id = 'ats-classic';
+  if (id === 'modern') id = 'student-modern';
+  if (id === 'professional') id = 'pro-elegant';
+  if (id === 'creative') id = 'creative-design';
+
+  const index = CV_TEMPLATES.findIndex((t) => t.id === id);
+  return index >= 0 ? index + 1 : 1;
+};
+
+// Formatted template number: e.g. "Mẫu 01", "Mẫu 24"
+export const getTemplateCode = (id: string): string => {
+  const num = getTemplateIndex(id);
+  return `Mẫu ${num < 10 ? '0' + num : num}`;
+};
+
+// Formatted display name: e.g. "Mẫu 01 – CV Khởi đầu"
+export const getTemplateDisplayName = (id: string): string => {
+  const meta = getTemplateById(id);
+  const code = getTemplateCode(id);
+  return `${code} – ${meta.name}`;
+};
+
 // Smart template recommendation based on student level & target role
 export const getRecommendedTemplate = (
   level: StudentLevel,

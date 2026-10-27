@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
 import { CVData, CVTemplateId, CVThemeConfig } from '../types';
-import { SAMPLE_DEFAULT_CV } from '../data/mockData';
+import { SAMPLE_DEFAULT_CV, createBlankCVData } from '../data/mockData';
 
 export interface CVDoc {
   id: string;
@@ -128,7 +128,7 @@ export const createCV = async (
     cvName: cvName.trim() || 'CV Mới của tôi',
     templateId,
     targetRole: customData?.contact.title || 'Thực tập sinh / Fresher',
-    cvData: customData || SAMPLE_DEFAULT_CV,
+    cvData: customData || createBlankCVData(),
     showPhoto: customData?.photo?.visible ?? true,
     photoShape: customData?.photo?.shape || 'circle',
     isDefault,

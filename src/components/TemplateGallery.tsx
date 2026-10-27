@@ -18,7 +18,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { CVData, CVTemplateCategory, CVTemplateId, CVTemplateMeta, StudentLevel } from '../types';
-import { CV_CATEGORIES, CV_TEMPLATES, getRecommendedTemplate, getTemplateById } from '../templates/templateRegistry';
+import {
+  CV_CATEGORIES,
+  CV_TEMPLATES,
+  getRecommendedTemplate,
+  getTemplateById,
+  getTemplateCode,
+  getTemplateDisplayName,
+  getTemplateIndex,
+} from '../templates/templateRegistry';
 import { MiniCVPreview } from '../templates/MiniCVPreview';
 import { CVRenderer } from '../templates/CVRenderer';
 import { ChiAnCharacter } from './ChiAnMascot';
@@ -188,8 +196,8 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="text-[11px] font-bold text-slate-700 px-2 min-w-[120px] sm:min-w-[150px] text-center truncate">
-                {previewTemplate.name}
+              <span className="text-xs font-bold text-slate-800 px-3 min-w-[140px] sm:min-w-[180px] text-center truncate">
+                {getTemplateDisplayName(previewTemplate.id)}
               </span>
               <button
                 type="button"
@@ -532,15 +540,18 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
                 </div>
 
                 {/* Badges */}
-                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
-                  {template.badge && (
-                    <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-bold text-[10px] shadow-xs">
-                      {template.badge}
+                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-900 text-white font-black text-[10px] shadow-xs tracking-wide">
+                    {getTemplateCode(template.id)}
+                  </span>
+                  {isSelected && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-extrabold text-[10px] shadow-xs flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Đang sử dụng
                     </span>
                   )}
-                  {isSelected && (
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold text-[10px] shadow-xs flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Đang dùng
+                  {template.badge && !isSelected && (
+                    <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-bold text-[10px] shadow-xs">
+                      {template.badge}
                     </span>
                   )}
                 </div>
@@ -555,21 +566,21 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
               {/* Card Meta Content */}
               <div className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col justify-between text-left">
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-1">
                     <h4 className="font-extrabold text-sm text-slate-900 tracking-tight">
-                      {template.name}
+                      {getTemplateCode(template.id)} – {template.name}
                     </h4>
-                    <span className="text-[10px] font-semibold text-slate-400">
+                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
                       {template.categoryName}
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">
+                  <p className="text-[12px] text-slate-600 leading-snug line-clamp-2">
                     {template.description}
                   </p>
 
                   <div className="pt-1">
-                    <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md inline-block">
+                    <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md inline-block">
                       🎯 {template.recommendedFor}
                     </span>
                   </div>
@@ -601,10 +612,10 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
                     {isSelected ? (
                       <>
                         <Check className="w-3.5 h-3.5" />
-                        <span>Đã chọn</span>
+                        <span>Đang dùng</span>
                       </>
                     ) : (
-                      <span>Sử dụng</span>
+                      <span>Sử dụng mẫu</span>
                     )}
                   </button>
                 </div>

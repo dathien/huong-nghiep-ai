@@ -57,34 +57,37 @@ export const CVRenderer: React.FC<CVRendererProps> = ({
 
   const { contact, summary, skills, education, projects, experience, activities, achievements, certifications, languages, photo } = cvData;
 
-  // Font sizing scale
+  // Font sizing scale aligned with standard CV points (18-24pt name, 11-14pt title, 11-13pt heading, 10-11pt body, 9.5-10.5pt sub)
   const sizeClasses = {
     compact: {
-      name: 'text-xl sm:text-2xl',
-      title: 'text-xs sm:text-sm',
-      heading: 'text-xs',
-      body: 'text-[11px] leading-snug',
-      sub: 'text-[10px]',
-      padding: 'p-5 sm:p-6',
-      gap: 'space-y-3.5',
+      name: 'text-[22px] sm:text-[24px] font-black leading-tight',
+      title: 'text-[13px] sm:text-[14px] font-bold tracking-wide',
+      heading: 'text-[13px] font-black tracking-wider uppercase',
+      itemTitle: 'text-[13px] font-bold text-slate-900',
+      body: 'text-[12.5px] leading-[1.35] text-slate-700',
+      sub: 'text-[12px] text-slate-500',
+      padding: 'p-6 sm:p-7',
+      gap: 'space-y-4',
     },
     standard: {
-      name: 'text-2xl sm:text-3xl',
-      title: 'text-sm sm:text-base',
-      heading: 'text-xs sm:text-sm',
-      body: 'text-xs leading-relaxed',
-      sub: 'text-[11px]',
-      padding: 'p-6 sm:p-8',
-      gap: 'space-y-4 sm:space-y-5',
+      name: 'text-[26px] sm:text-[28px] font-black leading-tight',
+      title: 'text-[14px] sm:text-[15px] font-bold tracking-wide',
+      heading: 'text-[14px] font-black tracking-wider uppercase',
+      itemTitle: 'text-[14px] font-bold text-slate-900',
+      body: 'text-[13.5px] leading-[1.4] text-slate-700',
+      sub: 'text-[12.5px] text-slate-500',
+      padding: 'p-8 sm:p-9',
+      gap: 'space-y-5',
     },
     relaxed: {
-      name: 'text-3xl sm:text-4xl',
-      title: 'text-base sm:text-lg',
-      heading: 'text-sm sm:text-base',
-      body: 'text-[13px] leading-relaxed',
-      sub: 'text-xs',
-      padding: 'p-8 sm:p-10',
-      gap: 'space-y-5 sm:space-y-6',
+      name: 'text-[28px] sm:text-[32px] font-black leading-tight',
+      title: 'text-[16px] sm:text-[17px] font-bold tracking-wide',
+      heading: 'text-[15px] font-black tracking-wider uppercase',
+      itemTitle: 'text-[15px] font-bold text-slate-900',
+      body: 'text-[14.5px] leading-[1.45] text-slate-700',
+      sub: 'text-[13.5px] text-slate-500',
+      padding: 'p-9 sm:p-10',
+      gap: 'space-y-6',
     },
   }[fontSize];
 
