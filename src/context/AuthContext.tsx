@@ -289,16 +289,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginWithGoogle = async () => {
     try {
       const res = await signInWithPopup(auth, googleProvider);
+      if (!res || !res.user) {
+        throw new Error('Firebase Authentication không trả về UserCredential hợp lệ.');
+      }
+      console.log('Firebase Auth Google Sign-in SUCCESS:', {
+        uid: res.user.uid,
+        email: res.user.email,
+        projectId: auth.app.options.projectId,
+        provider: res.user.providerData.map((p) => p.providerId),
+      });
       await fetchUserData(res.user);
       closeAuthModal();
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error('Cửa sổ đăng nhập Google đã được đóng.');
+      console.error('Firebase Auth Google Error:', error);
+      let message = `${error.message || 'Đăng nhập bằng Google thất bại.'} [Mã lỗi: ${error.code || 'unknown'}]`;
+      if (error.code === 'auth/unauthorized-domain') {
+        const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'hiện tại';
+        message = `Tên miền "${currentHost}" chưa được cấp quyền trong Firebase Authentication. Vui lòng vào Firebase Console (dự án huong-nghiep-ai) → Authentication → Settings → Authorized domains và thêm "${currentHost}". [Mã: auth/unauthorized-domain]`;
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        message = 'Cửa sổ đăng nhập Google đã được đóng trước khi hoàn tất. [Mã: auth/popup-closed-by-user]';
       } else if (error.code === 'auth/popup-blocked') {
-        throw new Error('Trình duyệt đã chặn popup. Vui lòng cấp quyền mở popup cho trang này.');
-      } else {
-        throw new Error('Đăng nhập bằng Google không thành công. Vui lòng thử lại.');
+        message = 'Trình duyệt đã chặn cửa sổ popup. Vui lòng cấp quyền mở popup cho trang này và thử lại. [Mã: auth/popup-blocked]';
+      } else if (error.code === 'auth/operation-not-allowed') {
+        message = 'Nhà cung cấp Google chưa được kích hoạt trong Firebase Console (Authentication → Sign-in method → Google → Enable). [Mã: auth/operation-not-allowed]';
+      } else if (error.code === 'auth/network-request-failed') {
+        message = 'Không thể kết nối đến máy chủ xác thực Firebase. Vui lòng kiểm tra lại đường truyền mạng. [Mã: auth/network-request-failed]';
       }
+      throw new Error(message);
     }
   };
 
