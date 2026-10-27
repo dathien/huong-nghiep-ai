@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   UserCheck,
   GraduationCap,
@@ -8,11 +8,9 @@ import {
   Plus,
   Trash2,
   CheckCircle2,
-  ArrowRight,
   Sparkles,
   ExternalLink,
   Edit3,
-  Save,
   Check,
   X,
   Cloud,
@@ -20,11 +18,13 @@ import {
   Calendar,
   Link as LinkIcon,
   Star,
-  BookOpen,
-  Briefcase,
   Eye,
   RotateCcw,
-  Clock
+  AlertTriangle,
+  ChevronRight,
+  Info,
+  Clock,
+  BookOpen
 } from 'lucide-react';
 import {
   CVData,
@@ -61,10 +61,10 @@ const SKILL_CATEGORY_LABELS: Record<CompetencySkillCategory, { label: string; ic
 };
 
 const PROFICIENCY_LABELS: Record<CompetencyProficiency, { label: string; stars: number; color: string }> = {
-  beginner: { label: 'Mới bắt đầu', stars: 1, color: 'text-slate-500 bg-slate-100' },
-  intermediate: { label: 'Khá', stars: 2, color: 'text-blue-700 bg-blue-100' },
-  proficient: { label: 'Thành thạo', stars: 3, color: 'text-emerald-700 bg-emerald-100' },
-  expert: { label: 'Xuất sắc', stars: 4, color: 'text-purple-700 bg-purple-100' },
+  beginner: { label: 'Mới bắt đầu', stars: 1, color: 'text-slate-600 bg-slate-100 border-slate-200' },
+  intermediate: { label: 'Khá', stars: 2, color: 'text-blue-700 bg-blue-100 border-blue-200' },
+  proficient: { label: 'Thành thạo', stars: 3, color: 'text-emerald-700 bg-emerald-100 border-emerald-200' },
+  expert: { label: 'Xuất sắc', stars: 4, color: 'text-purple-700 bg-purple-100 border-purple-200' },
 };
 
 const DEGREE_LEVELS = [
@@ -85,7 +85,7 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   const { currentUser, openAuthModal } = useAuth();
   const [activeSection, setActiveSection] = useState<'education' | 'skills' | 'projects' | 'certs'>('education');
 
-  // Real user profile data loaded from Firestore
+  // Real user profile data loaded from Firestore (users/{uid}/profile/main)
   const [profile, setProfile] = useState<CompetencyProfileData>({
     education: [],
     skills: [],
@@ -93,7 +93,7 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     certificates: [],
   });
 
-  // UI state
+  // UI status
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
@@ -101,13 +101,23 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [isPreviewSampleMode, setIsPreviewSampleMode] = useState(false);
 
-  // Sync to CV modal state
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  // Inline forms management (NO MODALS, NO POPUPS)
+  const formRef = useRef<HTMLDivElement | null>(null);
+  const [activeFormSection, setActiveFormSection] = useState<'education' | 'skills' | 'projects' | 'certs' | null>(null);
+  const [formValidationError, setFormValidationError] = useState<string | null>(null);
+
+  // Delete confirmation in-card state (NO window.confirm)
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+
+  // Sample data inline confirmation (NO alert, NO confirm)
+  const [showPopulateSampleCard, setShowPopulateSampleCard] = useState(false);
+
+  // Sync to CV inline confirmation panel (NO modal)
+  const [showSyncCvPanel, setShowSyncCvPanel] = useState(false);
   const [isSyncSuccess, setIsSyncSuccess] = useState(false);
 
-  // Modal / Form state for each tab
+  // Form states
   // 1. Education
-  const [isEduModalOpen, setIsEduModalOpen] = useState(false);
   const [editingEduId, setEditingEduId] = useState<string | null>(null);
   const [eduForm, setEduForm] = useState<Omit<CompetencyEducation, 'id'>>({
     school: '',
@@ -124,7 +134,6 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   const [eduAchievementsInput, setEduAchievementsInput] = useState('');
 
   // 2. Skill
-  const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [skillFilterCategory, setSkillFilterCategory] = useState<string>('all');
   const [skillForm, setSkillForm] = useState<Omit<CompetencySkill, 'id'>>({
@@ -135,7 +144,6 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   });
 
   // 3. Project
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState<Omit<CompetencyProject, 'id'>>({
     name: '',
@@ -150,7 +158,6 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   const [projectResultsInput, setProjectResultsInput] = useState('');
 
   // 4. Certificate
-  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
   const [editingCertId, setEditingCertId] = useState<string | null>(null);
   const [certForm, setCertForm] = useState<Omit<CompetencyCertificate, 'id'>>({
     name: '',
@@ -191,7 +198,7 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
                   .padStart(2, '0')}`
               );
             } catch {
-              // ignore
+              // ignore date parsing error
             }
           }
         }
@@ -206,11 +213,14 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     return () => unsubscribe();
   }, [currentUser]);
 
-  // Persist helper
-  const handleSaveToCloud = async (updatedProfile: CompetencyProfileData) => {
+  // Persist helper to Cloud Firestore
+  const handleSaveToCloud = async (
+    updatedProfile: CompetencyProfileData,
+    successText = 'Đã lưu thay đổi vào Cloud Firestore!'
+  ) => {
     if (!currentUser) {
       openAuthModal('login', 'Đăng nhập để lưu hồ sơ năng lực vào tài khoản Cloud Firestore của bạn.');
-      return;
+      return false;
     }
 
     try {
@@ -225,23 +235,32 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
           .toString()
           .padStart(2, '0')}`
       );
-      setSaveSuccessMsg('Đã lưu thay đổi vào Cloud Firestore!');
-      setTimeout(() => setSaveSuccessMsg(''), 3000);
+      setSaveSuccessMsg(successText);
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
+      return true;
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(`Lỗi khi lưu dữ liệu lên Cloud: ${err.message || 'Có lỗi xảy ra'}`);
+      setErrorMessage(`Lỗi khi lưu dữ liệu lên Cloud Firestore: ${err.message || 'Có lỗi xảy ra. Vui lòng thử lại.'}`);
+      return false;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Helper to scroll smoothly to inline form
+  const scrollToForm = () => {
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
   };
 
   // Active data viewed (sample vs real)
   const currentViewData = isPreviewSampleMode ? SAMPLE_COMPETENCY_PROFILE : profile;
 
   // ==========================================
-  // 1. EDUCATION HANDLERS
+  // 1. EDUCATION INLINE HANDLERS
   // ==========================================
-  const openAddEduModal = () => {
+  const handleOpenAddEdu = () => {
     setEditingEduId(null);
     setEduForm({
       school: '',
@@ -256,10 +275,12 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     });
     setEduCourseworkInput('');
     setEduAchievementsInput('');
-    setIsEduModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('education');
+    scrollToForm();
   };
 
-  const openEditEduModal = (edu: CompetencyEducation) => {
+  const handleOpenEditEdu = (edu: CompetencyEducation) => {
     setEditingEduId(edu.id);
     setEduForm({
       school: edu.school,
@@ -274,13 +295,15 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     });
     setEduCourseworkInput((edu.coursework || []).join(', '));
     setEduAchievementsInput((edu.achievements || []).join('\n'));
-    setIsEduModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('education');
+    scrollToForm();
   };
 
   const handleSaveEdu = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eduForm.school.trim()) {
-      alert('Vui lòng nhập tên trường đào tạo.');
+      setFormValidationError('Vui lòng nhập tên trường / cơ sở đào tạo.');
       return;
     }
 
@@ -321,23 +344,31 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       education: updatedList,
     };
 
-    setIsEduModalOpen(false);
-    await handleSaveToCloud(updatedProfile);
+    const success = await handleSaveToCloud(
+      updatedProfile,
+      editingEduId ? 'Đã cập nhật quá trình học vấn thành công!' : 'Đã thêm quá trình học vấn mới thành công!'
+    );
+
+    if (success) {
+      setActiveFormSection(null);
+      setEditingEduId(null);
+      setFormValidationError(null);
+    }
   };
 
-  const handleDeleteEdu = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa mục học vấn này?')) return;
+  const handleConfirmDeleteEdu = async (id: string) => {
     const updatedProfile: CompetencyProfileData = {
       ...profile,
       education: profile.education.filter((item) => item.id !== id),
     };
-    await handleSaveToCloud(updatedProfile);
+    await handleSaveToCloud(updatedProfile, 'Đã xóa mục học vấn thành công!');
+    setDeletingItemId(null);
   };
 
   // ==========================================
-  // 2. SKILL HANDLERS
+  // 2. SKILL INLINE HANDLERS
   // ==========================================
-  const openAddSkillModal = () => {
+  const handleOpenAddSkill = () => {
     setEditingSkillId(null);
     setSkillForm({
       name: '',
@@ -345,10 +376,12 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       proficiency: 'proficient',
       evidence: '',
     });
-    setIsSkillModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('skills');
+    scrollToForm();
   };
 
-  const openEditSkillModal = (skill: CompetencySkill) => {
+  const handleOpenEditSkill = (skill: CompetencySkill) => {
     setEditingSkillId(skill.id);
     setSkillForm({
       name: skill.name,
@@ -356,13 +389,15 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       proficiency: skill.proficiency,
       evidence: skill.evidence || '',
     });
-    setIsSkillModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('skills');
+    scrollToForm();
   };
 
   const handleSaveSkill = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!skillForm.name.trim()) {
-      alert('Vui lòng nhập tên kỹ năng.');
+      setFormValidationError('Vui lòng nhập tên kỹ năng.');
       return;
     }
 
@@ -386,23 +421,31 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       skills: updatedList,
     };
 
-    setIsSkillModalOpen(false);
-    await handleSaveToCloud(updatedProfile);
+    const success = await handleSaveToCloud(
+      updatedProfile,
+      editingSkillId ? 'Đã cập nhật kỹ năng thành công!' : 'Đã thêm kỹ năng mới thành công!'
+    );
+
+    if (success) {
+      setActiveFormSection(null);
+      setEditingSkillId(null);
+      setFormValidationError(null);
+    }
   };
 
-  const handleDeleteSkill = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa kỹ năng này?')) return;
+  const handleConfirmDeleteSkill = async (id: string) => {
     const updatedProfile: CompetencyProfileData = {
       ...profile,
       skills: profile.skills.filter((item) => item.id !== id),
     };
-    await handleSaveToCloud(updatedProfile);
+    await handleSaveToCloud(updatedProfile, 'Đã xóa kỹ năng thành công!');
+    setDeletingItemId(null);
   };
 
   // ==========================================
-  // 3. PROJECT HANDLERS
+  // 3. PROJECT INLINE HANDLERS
   // ==========================================
-  const openAddProjectModal = () => {
+  const handleOpenAddProject = () => {
     setEditingProjectId(null);
     setProjectForm({
       name: '',
@@ -415,10 +458,12 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     });
     setProjectTechInput('');
     setProjectResultsInput('');
-    setIsProjectModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('projects');
+    scrollToForm();
   };
 
-  const openEditProjectModal = (proj: CompetencyProject) => {
+  const handleOpenEditProject = (proj: CompetencyProject) => {
     setEditingProjectId(proj.id);
     setProjectForm({
       name: proj.name,
@@ -431,13 +476,15 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     });
     setProjectTechInput(proj.techStack.join(', '));
     setProjectResultsInput(proj.results.join('\n'));
-    setIsProjectModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('projects');
+    scrollToForm();
   };
 
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectForm.name.trim()) {
-      alert('Vui lòng nhập tên đồ án/dự án.');
+      setFormValidationError('Vui lòng nhập tên đồ án / dự án STEM.');
       return;
     }
 
@@ -474,23 +521,31 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       projects: updatedList,
     };
 
-    setIsProjectModalOpen(false);
-    await handleSaveToCloud(updatedProfile);
+    const success = await handleSaveToCloud(
+      updatedProfile,
+      editingProjectId ? 'Đã cập nhật đồ án thành công!' : 'Đã thêm đồ án mới thành công!'
+    );
+
+    if (success) {
+      setActiveFormSection(null);
+      setEditingProjectId(null);
+      setFormValidationError(null);
+    }
   };
 
-  const handleDeleteProject = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa đồ án/dự án này?')) return;
+  const handleConfirmDeleteProject = async (id: string) => {
     const updatedProfile: CompetencyProfileData = {
       ...profile,
       projects: profile.projects.filter((item) => item.id !== id),
     };
-    await handleSaveToCloud(updatedProfile);
+    await handleSaveToCloud(updatedProfile, 'Đã xóa đồ án thành công!');
+    setDeletingItemId(null);
   };
 
   // ==========================================
-  // 4. CERTIFICATE HANDLERS
+  // 4. CERTIFICATE INLINE HANDLERS
   // ==========================================
-  const openAddCertModal = () => {
+  const handleOpenAddCert = () => {
     setEditingCertId(null);
     setCertForm({
       name: '',
@@ -500,10 +555,12 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       credentialId: '',
       verificationUrl: '',
     });
-    setIsCertModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('certs');
+    scrollToForm();
   };
 
-  const openEditCertModal = (cert: CompetencyCertificate) => {
+  const handleOpenEditCert = (cert: CompetencyCertificate) => {
     setEditingCertId(cert.id);
     setCertForm({
       name: cert.name,
@@ -513,17 +570,19 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       credentialId: cert.credentialId || '',
       verificationUrl: cert.verificationUrl || '',
     });
-    setIsCertModalOpen(true);
+    setFormValidationError(null);
+    setActiveFormSection('certs');
+    scrollToForm();
   };
 
   const handleSaveCert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!certForm.name.trim()) {
-      alert('Vui lòng nhập tên chứng chỉ.');
+      setFormValidationError('Vui lòng nhập tên chứng chỉ.');
       return;
     }
     if (!certForm.issuer.trim()) {
-      alert('Vui lòng nhập đơn vị cấp chứng chỉ.');
+      setFormValidationError('Vui lòng nhập đơn vị cấp chứng chỉ.');
       return;
     }
 
@@ -549,24 +608,58 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       certificates: updatedList,
     };
 
-    setIsCertModalOpen(false);
-    await handleSaveToCloud(updatedProfile);
+    const success = await handleSaveToCloud(
+      updatedProfile,
+      editingCertId ? 'Đã cập nhật chứng chỉ thành công!' : 'Đã thêm chứng chỉ mới thành công!'
+    );
+
+    if (success) {
+      setActiveFormSection(null);
+      setEditingCertId(null);
+      setFormValidationError(null);
+    }
   };
 
-  const handleDeleteCert = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa chứng chỉ này?')) return;
+  const handleConfirmDeleteCert = async (id: string) => {
     const updatedProfile: CompetencyProfileData = {
       ...profile,
       certificates: profile.certificates.filter((item) => item.id !== id),
     };
-    await handleSaveToCloud(updatedProfile);
+    await handleSaveToCloud(updatedProfile, 'Đã xóa chứng chỉ thành công!');
+    setDeletingItemId(null);
   };
 
   // ==========================================
-  // 5. SYNC TO CV LOGIC
+  // 5. SAMPLE DATA POPULATION (INLINE CONFIRMATION)
+  // ==========================================
+  const handlePopulateSampleConfirm = async () => {
+    // If the profile already has items, merge them safely rather than completely discarding user items
+    const mergedProfile: CompetencyProfileData = {
+      education: profile.education.length > 0 ? profile.education : SAMPLE_COMPETENCY_PROFILE.education,
+      skills:
+        profile.skills.length > 0
+          ? [
+              ...profile.skills,
+              ...SAMPLE_COMPETENCY_PROFILE.skills.filter(
+                (sampleSkill) => !profile.skills.some((s) => s.name.toLowerCase() === sampleSkill.name.toLowerCase())
+              ),
+            ]
+          : SAMPLE_COMPETENCY_PROFILE.skills,
+      projects: profile.projects.length > 0 ? profile.projects : SAMPLE_COMPETENCY_PROFILE.projects,
+      certificates: profile.certificates.length > 0 ? profile.certificates : SAMPLE_COMPETENCY_PROFILE.certificates,
+    };
+
+    const success = await handleSaveToCloud(mergedProfile, 'Đã nạp dữ liệu hồ sơ mẫu thành công vào tài khoản của bạn!');
+    if (success) {
+      setShowPopulateSampleCard(false);
+      setIsPreviewSampleMode(false);
+    }
+  };
+
+  // ==========================================
+  // 6. SYNC TO CV LOGIC (INLINE PANEL)
   // ==========================================
   const handleConfirmSyncToCv = () => {
-    // Merge without destroying existing custom fields
     setCvData((prev) => {
       // 1. Education conversion
       const newEducations = profile.education.map((edu) => ({
@@ -620,18 +713,9 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     setIsSyncSuccess(true);
     setTimeout(() => {
       setIsSyncSuccess(false);
-      setIsSyncModalOpen(false);
+      setShowSyncCvPanel(false);
       onNavigateTab('cv-builder');
-    }, 1000);
-  };
-
-  // Populate sample data into user's profile on explicit request
-  const handlePopulateSampleToMyProfile = async () => {
-    if (!window.confirm('Hành động này sẽ nạp bộ dữ liệu mẫu khởi đầu vào hồ sơ của bạn. Bạn vẫn có thể chỉnh sửa hoặc xóa từng mục bất cứ lúc nào. Bạn có muốn tiếp tục?')) {
-      return;
-    }
-    await handleSaveToCloud(SAMPLE_COMPETENCY_PROFILE);
-    setIsPreviewSampleMode(false);
+    }, 900);
   };
 
   return (
@@ -651,14 +735,24 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
                 <span>Cloud Firestore</span>
               </span>
             )}
+
+            {lastSavedTime && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                <Clock className="w-3 h-3 text-slate-400" />
+                <span>Đã lưu lúc {lastSavedTime}</span>
+              </span>
+            )}
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             Quản Lý Hành Trang & Điểm Mạnh Năng Lực
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
-            Lưu trữ tập trung quá trình học tập, ma trận kỹ năng, đồ án môn học và chứng chỉ xác thực.
-            Toàn bộ dữ liệu được quản lý an toàn tại <code className="text-blue-700 font-mono text-xs bg-blue-50 px-1 py-0.5 rounded">users/{'{uid}'}/profile/main</code> và có thể đồng bộ sang CV chuẩn ATS bất kỳ lúc nào.
+            Chỉnh sửa trực tiếp trên trang, không mở popup. Dữ liệu được lưu trữ an toàn tại{' '}
+            <code className="text-blue-700 font-mono text-xs bg-blue-50 px-1 py-0.5 rounded">
+              users/{'{uid}'}/profile/main
+            </code>{' '}
+            và có thể đồng bộ sang CV chuẩn ATS bất kỳ lúc nào.
           </p>
         </div>
 
@@ -667,7 +761,12 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
           {/* Sample Mode Toggle */}
           <button
             type="button"
-            onClick={() => setIsPreviewSampleMode(!isPreviewSampleMode)}
+            onClick={() => {
+              setIsPreviewSampleMode(!isPreviewSampleMode);
+              setShowPopulateSampleCard(false);
+              setShowSyncCvPanel(false);
+              setActiveFormSection(null);
+            }}
             className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
               isPreviewSampleMode
                 ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs'
@@ -687,10 +786,13 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
             )}
           </button>
 
-          {/* Sync to CV Button */}
+          {/* Sync to CV Toggle Button */}
           <button
             type="button"
-            onClick={() => setIsSyncModalOpen(true)}
+            onClick={() => {
+              setShowSyncCvPanel(!showSyncCvPanel);
+              setShowPopulateSampleCard(false);
+            }}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
@@ -699,18 +801,204 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
         </div>
       </div>
 
-      {/* Cloud & Status Notifications */}
+      {/* Integrated In-Page Status Notifications */}
       {saveSuccessMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-medium">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{saveSuccessMsg}</span>
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs flex items-center justify-between gap-3 animate-fade-in font-medium shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{saveSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSaveSuccessMsg('')}
+            className="text-emerald-700 hover:text-emerald-900 p-1 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-medium">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{errorMessage}</span>
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs flex items-center justify-between gap-3 animate-fade-in font-medium shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage('')}
+            className="text-rose-700 hover:text-rose-900 p-1 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* INLINE CONFIRMATION 1: SAMPLE PROFILE POPULATION (Requirement 6) */}
+      {showPopulateSampleCard && (
+        <div className="bg-amber-50/95 border-2 border-amber-300 rounded-3xl p-6 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-amber-200/80 text-amber-900 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-amber-800" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-amber-950">Nạp dữ liệu hồ sơ mẫu</h3>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Hệ thống sẽ bổ sung dữ liệu mẫu để bạn tham khảo và chỉnh sửa.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPopulateSampleCard(false)}
+              className="text-amber-700 hover:text-amber-900 p-1 cursor-pointer rounded-lg hover:bg-amber-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="bg-white/80 rounded-2xl p-4 border border-amber-200 space-y-2 text-xs text-slate-700">
+            <p className="font-semibold text-slate-800">
+              Chi tiết dữ liệu mẫu được nạp vào hồ sơ của bạn:
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1">
+              <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100">
+                <div className="font-bold text-amber-900 text-sm">{SAMPLE_COMPETENCY_PROFILE.education.length}</div>
+                <div className="text-[11px] text-amber-800">Quá trình học vấn</div>
+              </div>
+              <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100">
+                <div className="font-bold text-amber-900 text-sm">{SAMPLE_COMPETENCY_PROFILE.skills.length}</div>
+                <div className="text-[11px] text-amber-800">Kỹ năng cốt lõi</div>
+              </div>
+              <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100">
+                <div className="font-bold text-amber-900 text-sm">{SAMPLE_COMPETENCY_PROFILE.projects.length}</div>
+                <div className="text-[11px] text-amber-800">Đồ án thực tiễn</div>
+              </div>
+              <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100">
+                <div className="font-bold text-amber-900 text-sm">{SAMPLE_COMPETENCY_PROFILE.certificates.length}</div>
+                <div className="text-[11px] text-amber-800">Chứng chỉ xác thực</div>
+              </div>
+            </div>
+            {profile.education.length > 0 && (
+              <p className="text-[11px] text-slate-600 pt-2 border-t border-amber-100">
+                💡 <em>Lưu ý:</em> Hồ sơ của bạn đã có {profile.education.length} học vấn và {profile.skills.length} kỹ năng. Hệ thống sẽ tích hợp an toàn mà không làm mất thông tin học vấn bạn đã nhập.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowPopulateSampleCard(false)}
+              className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handlePopulateSampleConfirm}
+              disabled={isSaving}
+              className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60"
+            >
+              {isSaving ? 'Đang nạp...' : 'Nạp dữ liệu mẫu'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* INLINE CONFIRMATION 2: SYNC TO CV PANEL (Requirement 1, NO MODAL) */}
+      {showSyncCvPanel && (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 border-2 border-blue-300 rounded-3xl p-6 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <Sparkles className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Đồng Bộ Dữ Liệu Sang Phân Hệ Thiết Kế CV
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Tự động chuyển đổi các mục đã lưu trong Hồ sơ năng lực sang cấu trúc chuẩn ATS của CV.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowSyncCvPanel(false)}
+              className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer rounded-lg hover:bg-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white p-3 rounded-2xl border border-blue-100 shadow-2xs">
+              <div className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold mb-1">
+                <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
+                <span>Học vấn</span>
+              </div>
+              <div className="text-lg font-black text-slate-900">{profile.education.length} mục</div>
+            </div>
+
+            <div className="bg-white p-3 rounded-2xl border border-blue-100 shadow-2xs">
+              <div className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold mb-1">
+                <Layers className="w-3.5 h-3.5 text-blue-600" />
+                <span>Kỹ năng</span>
+              </div>
+              <div className="text-lg font-black text-slate-900">{profile.skills.length} mục</div>
+            </div>
+
+            <div className="bg-white p-3 rounded-2xl border border-blue-100 shadow-2xs">
+              <div className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold mb-1">
+                <FolderGit2 className="w-3.5 h-3.5 text-blue-600" />
+                <span>Đồ án STEM</span>
+              </div>
+              <div className="text-lg font-black text-slate-900">{profile.projects.length} đồ án</div>
+            </div>
+
+            <div className="bg-white p-3 rounded-2xl border border-blue-100 shadow-2xs">
+              <div className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold mb-1">
+                <Award className="w-3.5 h-3.5 text-blue-600" />
+                <span>Chứng chỉ</span>
+              </div>
+              <div className="text-lg font-black text-slate-900">{profile.certificates.length} chứng chỉ</div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-white/90 border border-blue-200/80 rounded-2xl text-[11px] text-slate-700 leading-relaxed font-medium">
+            💡 <strong>Bảo toàn dữ liệu cá nhân:</strong> Thông tin liên hệ, mục tiêu nghề nghiệp và các phần nội dung khác bạn đã biên tập riêng trên CV sẽ được giữ nguyên mà không bị mất.
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowSyncCvPanel(false)}
+              className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmSyncToCv}
+              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+            >
+              {isSyncSuccess ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-300" />
+                  <span>Đã đồng bộ thành công! Đang chuyển...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>Xác nhận & Chuyển sang Thiết kế CV</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
 
@@ -720,15 +1008,15 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              <strong>Chế độ xem mẫu:</strong> Bạn đang xem hồ sơ tham khảo tiêu chuẩn của bạn Nguyễn Minh Anh. Dữ liệu này không ghi đè vào tài khoản của bạn.
+              <strong>Chế độ xem mẫu:</strong> Bạn đang xem hồ sơ tham khảo tiêu chuẩn của bạn Nguyễn Minh Anh. Dữ liệu này độc lập và không tự ý thay thế dữ liệu đã lưu của bạn.
             </span>
           </div>
           <button
             type="button"
-            onClick={handlePopulateSampleToMyProfile}
-            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+            onClick={() => setShowPopulateSampleCard(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
           >
-            Nạp mẫu vào hồ sơ của tôi
+            Nạp dữ liệu mẫu
           </button>
         </div>
       )}
@@ -756,7 +1044,11 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs max-w-2xl overflow-x-auto">
         <button
           type="button"
-          onClick={() => setActiveSection('education')}
+          onClick={() => {
+            setActiveSection('education');
+            setActiveFormSection(null);
+            setDeletingItemId(null);
+          }}
           className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSection === 'education'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -769,7 +1061,11 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
 
         <button
           type="button"
-          onClick={() => setActiveSection('skills')}
+          onClick={() => {
+            setActiveSection('skills');
+            setActiveFormSection(null);
+            setDeletingItemId(null);
+          }}
           className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSection === 'skills'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -782,7 +1078,11 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
 
         <button
           type="button"
-          onClick={() => setActiveSection('projects')}
+          onClick={() => {
+            setActiveSection('projects');
+            setActiveFormSection(null);
+            setDeletingItemId(null);
+          }}
           className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSection === 'projects'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -795,7 +1095,11 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
 
         <button
           type="button"
-          onClick={() => setActiveSection('certs')}
+          onClick={() => {
+            setActiveSection('certs');
+            setActiveFormSection(null);
+            setDeletingItemId(null);
+          }}
           className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSection === 'certs'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -808,7 +1112,7 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       </div>
 
       {/* ============================================================= */}
-      {/* SECTION 1: EDUCATION                                           */}
+      {/* SECTION 1: EDUCATION (INLINE EDITING)                           */}
       {/* ============================================================= */}
       {activeSection === 'education' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
@@ -823,19 +1127,215 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               </p>
             </div>
 
-            {!isPreviewSampleMode && (
+            {!isPreviewSampleMode && activeFormSection !== 'education' && (
               <button
                 type="button"
-                onClick={openAddEduModal}
+                onClick={handleOpenAddEdu}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
-                <span>Thêm trường / quá trình học</span>
+                <span>Thêm quá trình học</span>
               </button>
             )}
           </div>
 
-          {currentViewData.education.length === 0 ? (
+          {/* INLINE EDUCATION FORM */}
+          {activeFormSection === 'education' && (
+            <div
+              ref={formRef}
+              className="bg-blue-50/40 border-2 border-blue-300 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5 animate-fade-in"
+            >
+              <div className="flex items-center justify-between border-b border-blue-200/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-extrabold text-slate-900">
+                      {editingEduId ? 'Chỉnh Sửa Quá Trình Học Vấn' : 'Thêm Quá Trình Học Tập Mới'}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Nhập thông tin trực tiếp bên dưới và nhấn "Lưu thay đổi" để đồng bộ lên Cloud Firestore.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormSection(null);
+                    setEditingEduId(null);
+                    setFormValidationError(null);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white transition-colors cursor-pointer"
+                  title="Hủy biểu mẫu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {formValidationError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formValidationError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveEdu} className="space-y-4 text-xs">
+                {/* School Name */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tên trường / Cơ sở đào tạo <span className="text-rose-500">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={eduForm.school}
+                    onChange={(e) => {
+                      setEduForm({ ...eduForm, school: e.target.value });
+                      if (formValidationError) setFormValidationError(null);
+                    }}
+                    placeholder="VD: Trường THPT Chuyên Lê Hồng Phong hoặc Đại học Bách Khoa TP.HCM"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                {/* Desktop 2 Columns Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Bậc học:</label>
+                    <select
+                      value={eduForm.degreeLevel}
+                      onChange={(e) => setEduForm({ ...eduForm, degreeLevel: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-2xs"
+                    >
+                      {DEGREE_LEVELS.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Ngành / Chuyên ngành (không bắt buộc đối với THPT):
+                    </label>
+                    <input
+                      type="text"
+                      value={eduForm.major || ''}
+                      onChange={(e) => setEduForm({ ...eduForm, major: e.target.value })}
+                      placeholder={eduForm.degreeLevel === 'Học sinh THPT' ? 'Ban Tự nhiên / Lớp Chuyên Toán...' : 'VD: Kỹ thuật Phần mềm, Quản trị Kinh doanh...'}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Thời gian bắt đầu:</label>
+                    <input
+                      type="text"
+                      value={eduForm.startDate}
+                      onChange={(e) => setEduForm({ ...eduForm, startDate: e.target.value })}
+                      placeholder="VD: 09/2022"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Thời gian kết thúc:</label>
+                    <input
+                      type="text"
+                      disabled={eduForm.isCurrent}
+                      value={eduForm.isCurrent ? 'Đang học' : eduForm.endDate}
+                      onChange={(e) => setEduForm({ ...eduForm, endDate: e.target.value })}
+                      placeholder="VD: 06/2026"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Checkbox currently studying */}
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={eduForm.isCurrent}
+                    onChange={(e) => setEduForm({ ...eduForm, isCurrent: e.target.checked })}
+                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-800 font-semibold">
+                    Hiện đang theo học tại cơ sở đào tạo này
+                  </span>
+                </label>
+
+                {/* GPA Field */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Điểm GPA / Điểm trung bình (không bắt buộc):
+                  </label>
+                  <input
+                    type="text"
+                    value={eduForm.gpa || ''}
+                    onChange={(e) => setEduForm({ ...eduForm, gpa: e.target.value })}
+                    placeholder="VD: 3.65 / 4.0 hoặc 8.8 / 10"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                {/* Coursework */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Môn học & Chuyên đề nổi bật (phân tách bằng dấu phẩy):
+                  </label>
+                  <input
+                    type="text"
+                    value={eduCourseworkInput}
+                    onChange={(e) => setEduCourseworkInput(e.target.value)}
+                    placeholder="VD: Cấu trúc dữ liệu & Giải thuật, Phát triển Web, Toán rời rạc..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                {/* Achievements & Scholarships */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Thành tích học tập & Học bổng (mỗi dòng một thành tích):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={eduAchievementsInput}
+                    onChange={(e) => setEduAchievementsInput(e.target.value)}
+                    placeholder="VD: Học bổng Khuyến khích Học tập loại Xuất sắc kỳ 1 & 2&#10;Giải Ba học sinh giỏi cấp Thành phố"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-2xs leading-relaxed"
+                  />
+                </div>
+
+                {/* Inline Form Action Buttons */}
+                <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-blue-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveFormSection(null);
+                      setEditingEduId(null);
+                      setFormValidationError(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold cursor-pointer transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60 transition-colors"
+                  >
+                    {isSaving ? 'Đang lưu vào Firestore...' : editingEduId ? 'Lưu thay đổi học vấn' : 'Lưu quá trình học'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Education Cards List */}
+          {currentViewData.education.length === 0 && activeFormSection !== 'education' ? (
             <div className="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
                 <GraduationCap className="w-6 h-6" />
@@ -844,112 +1344,147 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                 Hãy thêm trường học (THPT, Cao đẳng hoặc Đại học) cùng chuyên ngành và thành tích để bắt đầu hoàn thiện hồ sơ của bạn.
               </p>
-              <button
-                type="button"
-                onClick={openAddEduModal}
-                className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm học vấn đầu tiên</span>
-              </button>
+              {!isPreviewSampleMode && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddEdu}
+                  className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm học vấn đầu tiên</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {currentViewData.education.map((edu) => (
-                <div
-                  key={edu.id}
-                  className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 space-y-3 transition-all hover:bg-slate-50 relative group"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold">
-                          {edu.degreeLevel}
-                        </span>
-                        {edu.gpa && (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold">
-                            GPA: {edu.gpa}
-                          </span>
+              {currentViewData.education.map((edu) => {
+                const isDeletingThis = deletingItemId === edu.id;
+
+                return (
+                  <div
+                    key={edu.id}
+                    className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 space-y-3 transition-all hover:bg-slate-50 relative group"
+                  >
+                    {/* INLINE DELETE CONFIRMATION BOX (Requirement 5) */}
+                    {isDeletingThis ? (
+                      <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-2.5 text-rose-900 text-xs font-semibold">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>Bạn có chắc chắn muốn xóa mục học vấn tại "{edu.school}"?</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setDeletingItemId(null)}
+                            className="px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Giữ lại
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDeleteEdu(edu.id)}
+                            disabled={isSaving}
+                            className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+                          >
+                            {isSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold">
+                                {edu.degreeLevel}
+                              </span>
+                              {edu.gpa && (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                                  GPA: {edu.gpa}
+                                </span>
+                              )}
+                              <span className="text-xs text-slate-500 flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                <span>{edu.isCurrent ? `${edu.startDate} – Đang học` : `${edu.startDate} – ${edu.endDate}`}</span>
+                              </span>
+                            </div>
+
+                            <h4 className="font-extrabold text-base text-slate-900">{edu.school}</h4>
+
+                            {edu.major && (
+                              <p className="text-xs font-semibold text-blue-700">
+                                Chuyên ngành: {edu.major}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          {!isPreviewSampleMode && (
+                            <div className="flex items-center gap-1.5 self-end sm:self-start">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditEdu(edu)}
+                                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                                title="Chỉnh sửa trực tiếp"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingItemId(edu.id)}
+                                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Xóa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Coursework */}
+                        {edu.coursework && edu.coursework.length > 0 && (
+                          <div className="pt-2 border-t border-slate-200/60">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                              Môn học & Chuyên đề nổi bật:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {edu.coursework.map((course, cIdx) => (
+                                <span
+                                  key={cIdx}
+                                  className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-700 font-medium"
+                                >
+                                  {course}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                        <span className="text-xs text-slate-500 flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-slate-400" />
-                          <span>{edu.isCurrent ? `${edu.startDate} – Đang học` : `${edu.startDate} – ${edu.endDate}`}</span>
-                        </span>
-                      </div>
 
-                      <h4 className="font-extrabold text-base text-slate-900">{edu.school}</h4>
-
-                      {edu.major && (
-                        <p className="text-xs font-semibold text-blue-700">
-                          Chuyên ngành: {edu.major}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    {!isPreviewSampleMode && (
-                      <div className="flex items-center gap-1.5 self-end sm:self-start">
-                        <button
-                          type="button"
-                          onClick={() => openEditEduModal(edu)}
-                          className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
-                          title="Chỉnh sửa"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEdu(edu.id)}
-                          className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                        {/* Achievements */}
+                        {edu.achievements && edu.achievements.length > 0 && (
+                          <div className="pt-2 border-t border-slate-200/60 space-y-1">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Thành tích học tập & Học bổng:
+                            </span>
+                            <ul className="list-disc list-outside pl-4 text-xs text-slate-700 space-y-0.5">
+                              {edu.achievements.map((ach, aIdx) => (
+                                <li key={aIdx}>{ach}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-
-                  {/* Coursework */}
-                  {edu.coursework && edu.coursework.length > 0 && (
-                    <div className="pt-2 border-t border-slate-200/60">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
-                        Môn học & Chuyên đề nổi bật:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {edu.coursework.map((course, cIdx) => (
-                          <span
-                            key={cIdx}
-                            className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-700 font-medium"
-                          >
-                            {course}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Achievements */}
-                  {edu.achievements && edu.achievements.length > 0 && (
-                    <div className="pt-2 border-t border-slate-200/60 space-y-1">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                        Thành tích & Học bổng:
-                      </span>
-                      <ul className="list-disc list-outside pl-4 text-xs text-slate-700 space-y-0.5">
-                        {edu.achievements.map((ach, aIdx) => (
-                          <li key={aIdx}>{ach}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
       {/* ============================================================= */}
-      {/* SECTION 2: SKILLS                                              */}
+      {/* SECTION 2: SKILLS (INLINE EDITING)                              */}
       {/* ============================================================= */}
       {activeSection === 'skills' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
@@ -964,10 +1499,10 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               </p>
             </div>
 
-            {!isPreviewSampleMode && (
+            {!isPreviewSampleMode && activeFormSection !== 'skills' && (
               <button
                 type="button"
-                onClick={openAddSkillModal}
+                onClick={handleOpenAddSkill}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
@@ -1011,8 +1546,137 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
             })}
           </div>
 
+          {/* INLINE SKILL FORM */}
+          {activeFormSection === 'skills' && (
+            <div
+              ref={formRef}
+              className="bg-blue-50/40 border-2 border-blue-300 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5 animate-fade-in"
+            >
+              <div className="flex items-center justify-between border-b border-blue-200/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-extrabold text-slate-900">
+                      {editingSkillId ? 'Chỉnh Sửa Kỹ Năng' : 'Thêm Kỹ Năng Mới'}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Chỉnh sửa trực tiếp trên trang, không mở popup.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormSection(null);
+                    setEditingSkillId(null);
+                    setFormValidationError(null);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white transition-colors cursor-pointer"
+                  title="Hủy biểu mẫu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {formValidationError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formValidationError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveSkill} className="space-y-4 text-xs">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tên kỹ năng <span className="text-rose-500">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={skillForm.name}
+                    onChange={(e) => {
+                      setSkillForm({ ...skillForm, name: e.target.value });
+                      if (formValidationError) setFormValidationError(null);
+                    }}
+                    placeholder="VD: TypeScript, Thuyết trình trước đám đông, Tiếng Anh giao tiếp..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Nhóm kỹ năng:</label>
+                    <select
+                      value={skillForm.category}
+                      onChange={(e) => setSkillForm({ ...skillForm, category: e.target.value as any })}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-2xs"
+                    >
+                      {(Object.keys(SKILL_CATEGORY_LABELS) as CompetencySkillCategory[]).map((cat) => (
+                        <option key={cat} value={cat}>
+                          {SKILL_CATEGORY_LABELS[cat].icon} {SKILL_CATEGORY_LABELS[cat].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Mức độ thành thạo:</label>
+                    <select
+                      value={skillForm.proficiency}
+                      onChange={(e) => setSkillForm({ ...skillForm, proficiency: e.target.value as any })}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-2xs"
+                    >
+                      {(Object.keys(PROFICIENCY_LABELS) as CompetencyProficiency[]).map((pKey) => (
+                        <option key={pKey} value={pKey}>
+                          {PROFICIENCY_LABELS[pKey].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Minh chứng / Cách bạn đã áp dụng kỹ năng này vào học tập hoặc đồ án:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={skillForm.evidence || ''}
+                    onChange={(e) => setSkillForm({ ...skillForm, evidence: e.target.value })}
+                    placeholder="VD: Đã xây dựng 2 website React hoàn chỉnh; đạt điểm 9.0 môn Lập trình Web; đạt IELTS 6.5..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-2xs leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-blue-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveFormSection(null);
+                      setEditingSkillId(null);
+                      setFormValidationError(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold cursor-pointer transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60 transition-colors"
+                  >
+                    {isSaving ? 'Đang lưu vào Firestore...' : editingSkillId ? 'Lưu thay đổi kỹ năng' : 'Lưu kỹ năng'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
           {/* Skill Cards Grid */}
-          {currentViewData.skills.length === 0 ? (
+          {currentViewData.skills.length === 0 && activeFormSection !== 'skills' ? (
             <div className="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
                 <Layers className="w-6 h-6" />
@@ -1021,14 +1685,16 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                 Thêm kỹ năng chuyên môn, kỹ năng mềm hoặc ngoại ngữ kèm minh chứng để hoàn thiện điểm mạnh cạnh tranh của bạn.
               </p>
-              <button
-                type="button"
-                onClick={openAddSkillModal}
-                className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm kỹ năng đầu tiên</span>
-              </button>
+              {!isPreviewSampleMode && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddSkill}
+                  className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm kỹ năng đầu tiên</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1037,60 +1703,90 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
                 .map((skill) => {
                   const catMeta = SKILL_CATEGORY_LABELS[skill.category] || SKILL_CATEGORY_LABELS.technical;
                   const profMeta = PROFICIENCY_LABELS[skill.proficiency] || PROFICIENCY_LABELS.proficient;
+                  const isDeletingThis = deletingItemId === skill.id;
 
                   return (
                     <div
                       key={skill.id}
                       className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-2.5 transition-all hover:bg-slate-50 flex flex-col justify-between"
                     >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${catMeta.color} flex items-center gap-1`}
-                          >
-                            <span>{catMeta.icon}</span>
-                            <span>{catMeta.label}</span>
-                          </span>
-
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${profMeta.color} flex items-center gap-1`}
-                          >
-                            <Star className="w-2.5 h-2.5 fill-current" />
-                            <span>{profMeta.label}</span>
-                          </span>
+                      {/* INLINE DELETE CONFIRMATION BOX (Requirement 5) */}
+                      {isDeletingThis ? (
+                        <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                          <div className="flex items-center gap-2 text-rose-900 text-xs font-semibold">
+                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span>Xóa kỹ năng "{skill.name}"?</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setDeletingItemId(null)}
+                              className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Giữ lại
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmDeleteSkill(skill.id)}
+                              disabled={isSaving}
+                              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+                            >
+                              {isSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${catMeta.color} flex items-center gap-1`}
+                              >
+                                <span>{catMeta.icon}</span>
+                                <span>{catMeta.label}</span>
+                              </span>
 
-                        <h4 className="font-extrabold text-sm text-slate-900">{skill.name}</h4>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${profMeta.color} flex items-center gap-1`}
+                              >
+                                <Star className="w-2.5 h-2.5 fill-current" />
+                                <span>{profMeta.label}</span>
+                              </span>
+                            </div>
 
-                        {skill.evidence && (
-                          <p className="text-xs text-slate-600 leading-relaxed italic bg-white/70 p-2.5 rounded-xl border border-slate-200/60">
-                            "{skill.evidence}"
-                          </p>
-                        )}
-                      </div>
+                            <h4 className="font-extrabold text-sm text-slate-900">{skill.name}</h4>
 
-                      {/* Actions */}
-                      {!isPreviewSampleMode && (
-                        <div className="flex justify-end items-center gap-1.5 pt-2 border-t border-slate-200/60">
-                          <button
-                            type="button"
-                            onClick={() => openEditSkillModal(skill)}
-                            className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
-                            title="Sửa kỹ năng"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Sửa</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSkill(skill.id)}
-                            className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
-                            title="Xóa kỹ năng"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Xóa</span>
-                          </button>
-                        </div>
+                            {skill.evidence && (
+                              <p className="text-xs text-slate-600 leading-relaxed italic bg-white/70 p-2.5 rounded-xl border border-slate-200/60">
+                                "{skill.evidence}"
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          {!isPreviewSampleMode && (
+                            <div className="flex justify-end items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditSkill(skill)}
+                                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
+                                title="Sửa kỹ năng"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Sửa</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingItemId(skill.id)}
+                                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
+                                title="Xóa kỹ năng"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Xóa</span>
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
@@ -1101,7 +1797,7 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       )}
 
       {/* ============================================================= */}
-      {/* SECTION 3: PROJECTS                                            */}
+      {/* SECTION 3: PROJECTS (INLINE EDITING)                           */}
       {/* ============================================================= */}
       {activeSection === 'projects' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
@@ -1116,10 +1812,10 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               </p>
             </div>
 
-            {!isPreviewSampleMode && (
+            {!isPreviewSampleMode && activeFormSection !== 'projects' && (
               <button
                 type="button"
-                onClick={openAddProjectModal}
+                onClick={handleOpenAddProject}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
@@ -1128,7 +1824,166 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
             )}
           </div>
 
-          {currentViewData.projects.length === 0 ? (
+          {/* INLINE PROJECT FORM */}
+          {activeFormSection === 'projects' && (
+            <div
+              ref={formRef}
+              className="bg-blue-50/40 border-2 border-blue-300 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5 animate-fade-in"
+            >
+              <div className="flex items-center justify-between border-b border-blue-200/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                    <FolderGit2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-extrabold text-slate-900">
+                      {editingProjectId ? 'Chỉnh Sửa Đồ Án / Dự Án' : 'Thêm Đồ Án / Dự Án Mới'}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Nhập thông tin đồ án hoặc bài tập lớn môn học trực tiếp vào biểu mẫu.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormSection(null);
+                    setEditingProjectId(null);
+                    setFormValidationError(null);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white transition-colors cursor-pointer"
+                  title="Hủy biểu mẫu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {formValidationError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formValidationError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveProject} className="space-y-4 text-xs">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tên đồ án / Dự án STEM / Hoạt động trải nghiệm <span className="text-rose-500">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={projectForm.name}
+                    onChange={(e) => {
+                      setProjectForm({ ...projectForm, name: e.target.value });
+                      if (formValidationError) setFormValidationError(null);
+                    }}
+                    placeholder="VD: Hệ thống Trao Đổi Giáo Trình Sinh Viên EcoBook hoặc Dự án STEM Nhà Thông Minh"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Vai trò thực hiện:</label>
+                    <input
+                      type="text"
+                      value={projectForm.role}
+                      onChange={(e) => setProjectForm({ ...projectForm, role: e.target.value })}
+                      placeholder="VD: Trưởng nhóm / Lập trình viên chính / Nghiên cứu tài liệu"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Thời gian thực hiện:</label>
+                    <input
+                      type="text"
+                      value={projectForm.period}
+                      onChange={(e) => setProjectForm({ ...projectForm, period: e.target.value })}
+                      placeholder="VD: 09/2025 – 12/2025"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Mô tả mục tiêu đồ án:</label>
+                  <textarea
+                    rows={2}
+                    value={projectForm.description}
+                    onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                    placeholder="VD: Xây dựng giải pháp hỗ trợ sinh viên chia sẻ và mượn giáo trình học kỳ tối ưu giao diện..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-2xs leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Công nghệ / Công cụ sử dụng (phân tách bằng dấu phẩy):
+                  </label>
+                  <input
+                    type="text"
+                    value={projectTechInput}
+                    onChange={(e) => setProjectTechInput(e.target.value)}
+                    placeholder="VD: React, TypeScript, Tailwind CSS, Firebase, Figma, Arduino..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Kết quả đạt được (mỗi dòng một gạch đầu dòng):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={projectResultsInput}
+                    onChange={(e) => setProjectResultsInput(e.target.value)}
+                    placeholder="VD: Đạt điểm 9.2/10 môn Đồ án Chuyên ngành&#10;Triển khai thử nghiệm với hơn 300 bạn học sử dụng&#10;Tối ưu tải trang dưới 1.2 giây"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-2xs leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Liên kết minh chứng (GitHub / Drive / Báo cáo / Demo):
+                  </label>
+                  <input
+                    type="text"
+                    value={projectForm.link || ''}
+                    onChange={(e) => setProjectForm({ ...projectForm, link: e.target.value })}
+                    placeholder="https://github.com/username/project hoặc https://drive.google.com/..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-blue-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveFormSection(null);
+                      setEditingProjectId(null);
+                      setFormValidationError(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold cursor-pointer transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60 transition-colors"
+                  >
+                    {isSaving ? 'Đang lưu vào Firestore...' : editingProjectId ? 'Lưu thay đổi đồ án' : 'Lưu đồ án'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Projects List */}
+          {currentViewData.projects.length === 0 && activeFormSection !== 'projects' ? (
             <div className="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
                 <FolderGit2 className="w-6 h-6" />
@@ -1137,112 +1992,147 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                 Đồ án môn học, bài tập lớn, dự án STEM hoặc website cá nhân là bằng chứng thuyết phục nhất trước nhà tuyển dụng.
               </p>
-              <button
-                type="button"
-                onClick={openAddProjectModal}
-                className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm đồ án đầu tiên</span>
-              </button>
+              {!isPreviewSampleMode && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddProject}
+                  className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm đồ án đầu tiên</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5">
-              {currentViewData.projects.map((proj) => (
-                <div
-                  key={proj.id}
-                  className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 space-y-3 transition-all hover:bg-slate-50"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-slate-400" />
-                          <span>{proj.period}</span>
-                        </span>
-                        <span className="text-xs font-bold text-blue-700">
-                          Vai trò: {proj.role}
-                        </span>
-                        {proj.link && (
-                          <a
-                            href={proj.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 hover:underline"
+              {currentViewData.projects.map((proj) => {
+                const isDeletingThis = deletingItemId === proj.id;
+
+                return (
+                  <div
+                    key={proj.id}
+                    className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 space-y-3 transition-all hover:bg-slate-50"
+                  >
+                    {/* INLINE DELETE CONFIRMATION BOX (Requirement 5) */}
+                    {isDeletingThis ? (
+                      <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-2.5 text-rose-900 text-xs font-semibold">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>Bạn có chắc chắn muốn xóa đồ án "{proj.name}"?</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setDeletingItemId(null)}
+                            className="px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
                           >
-                            <LinkIcon className="w-3 h-3" />
-                            <span>Minh chứng dự án</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
+                            Giữ lại
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDeleteProject(proj.id)}
+                            disabled={isSaving}
+                            className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+                          >
+                            {isSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                <span>{proj.period}</span>
+                              </span>
+                              <span className="text-xs font-bold text-blue-700">
+                                Vai trò: {proj.role}
+                              </span>
+                              {proj.link && (
+                                <a
+                                  href={proj.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 hover:underline"
+                                >
+                                  <LinkIcon className="w-3 h-3" />
+                                  <span>Minh chứng dự án</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+
+                            <h4 className="font-extrabold text-base text-slate-900">{proj.name}</h4>
+                          </div>
+
+                          {/* Actions */}
+                          {!isPreviewSampleMode && (
+                            <div className="flex items-center gap-1.5 self-end sm:self-start">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditProject(proj)}
+                                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                                title="Sửa đồ án trực tiếp"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingItemId(proj.id)}
+                                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Xóa đồ án"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {proj.description && (
+                          <p className="text-xs text-slate-700 leading-relaxed">{proj.description}</p>
                         )}
-                      </div>
 
-                      <h4 className="font-extrabold text-base text-slate-900">{proj.name}</h4>
-                    </div>
+                        {/* Tech stack */}
+                        {proj.techStack && proj.techStack.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {proj.techStack.map((tech, tIdx) => (
+                              <span
+                                key={tIdx}
+                                className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-700"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
-                    {/* Actions */}
-                    {!isPreviewSampleMode && (
-                      <div className="flex items-center gap-1.5 self-end sm:self-start">
-                        <button
-                          type="button"
-                          onClick={() => openEditProjectModal(proj)}
-                          className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
-                          title="Sửa đồ án"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProject(proj.id)}
-                          className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Xóa đồ án"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                        {/* Results list */}
+                        {proj.results && proj.results.length > 0 && (
+                          <div className="pt-2 border-t border-slate-200/60 space-y-1">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Kết quả & Điểm nhấn đạt được:
+                            </span>
+                            <ul className="list-disc list-outside pl-4 text-xs text-slate-700 space-y-0.5 leading-relaxed">
+                              {proj.results.map((res, rIdx) => (
+                                <li key={rIdx}>{res}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-
-                  {proj.description && (
-                    <p className="text-xs text-slate-700 leading-relaxed">{proj.description}</p>
-                  )}
-
-                  {/* Tech stack */}
-                  {proj.techStack && proj.techStack.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {proj.techStack.map((tech, tIdx) => (
-                        <span
-                          key={tIdx}
-                          className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-700"
-                        >
-                          {tech}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Results list */}
-                  {proj.results && proj.results.length > 0 && (
-                    <div className="pt-2 border-t border-slate-200/60 space-y-1">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                        Kết quả & Điểm nhấn đạt được:
-                      </span>
-                      <ul className="list-disc list-outside pl-4 text-xs text-slate-700 space-y-0.5 leading-relaxed">
-                        {proj.results.map((res, rIdx) => (
-                          <li key={rIdx}>{res}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
       {/* ============================================================= */}
-      {/* SECTION 4: CERTIFICATES                                       */}
+      {/* SECTION 4: CERTIFICATES (INLINE EDITING)                       */}
       {/* ============================================================= */}
       {activeSection === 'certs' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
@@ -1257,10 +2147,10 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               </p>
             </div>
 
-            {!isPreviewSampleMode && (
+            {!isPreviewSampleMode && activeFormSection !== 'certs' && (
               <button
                 type="button"
-                onClick={openAddCertModal}
+                onClick={handleOpenAddCert}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
@@ -1269,7 +2159,159 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
             )}
           </div>
 
-          {currentViewData.certificates.length === 0 ? (
+          {/* INLINE CERTIFICATE FORM */}
+          {activeFormSection === 'certs' && (
+            <div
+              ref={formRef}
+              className="bg-blue-50/40 border-2 border-blue-300 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5 animate-fade-in"
+            >
+              <div className="flex items-center justify-between border-b border-blue-200/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                    <Award className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-extrabold text-slate-900">
+                      {editingCertId ? 'Chỉnh Sửa Chứng Chỉ' : 'Thêm Chứng Chỉ Mới'}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Nhập thông tin chứng chỉ và liên kết xác minh trực tiếp trên trang.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormSection(null);
+                    setEditingCertId(null);
+                    setFormValidationError(null);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white transition-colors cursor-pointer"
+                  title="Hủy biểu mẫu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {formValidationError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formValidationError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveCert} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Tên chứng chỉ <span className="text-rose-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={certForm.name}
+                      onChange={(e) => {
+                        setCertForm({ ...certForm, name: e.target.value });
+                        if (formValidationError) setFormValidationError(null);
+                      }}
+                      placeholder="VD: Google Data Analytics Professional Certificate hoặc IELTS 7.0"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Đơn vị cấp <span className="text-rose-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={certForm.issuer}
+                      onChange={(e) => {
+                        setCertForm({ ...certForm, issuer: e.target.value });
+                        if (formValidationError) setFormValidationError(null);
+                      }}
+                      placeholder="VD: Google, Coursera, IDP, Microsoft, Meta..."
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Ngày cấp (Tháng/Năm):</label>
+                    <input
+                      type="text"
+                      value={certForm.issueDate}
+                      onChange={(e) => setCertForm({ ...certForm, issueDate: e.target.value })}
+                      placeholder="VD: 01/2025"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Ngày hết hạn (nếu có):</label>
+                    <input
+                      type="text"
+                      value={certForm.expiryDate || ''}
+                      onChange={(e) => setCertForm({ ...certForm, expiryDate: e.target.value })}
+                      placeholder="VD: 01/2027 hoặc để trống nếu vô thời hạn"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Mã chứng chỉ / Credential ID (nếu có):
+                    </label>
+                    <input
+                      type="text"
+                      value={certForm.credentialId || ''}
+                      onChange={(e) => setCertForm({ ...certForm, credentialId: e.target.value })}
+                      placeholder="VD: CERT-8899-COURSERA"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Liên kết xác minh (Verification URL):
+                    </label>
+                    <input
+                      type="text"
+                      value={certForm.verificationUrl || ''}
+                      onChange={(e) => setCertForm({ ...certForm, verificationUrl: e.target.value })}
+                      placeholder="https://coursera.org/verify/..."
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-blue-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveFormSection(null);
+                      setEditingCertId(null);
+                      setFormValidationError(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold cursor-pointer transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60 transition-colors"
+                  >
+                    {isSaving ? 'Đang lưu vào Firestore...' : editingCertId ? 'Lưu thay đổi chứng chỉ' : 'Lưu chứng chỉ'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Certificates Grid */}
+          {currentViewData.certificates.length === 0 && activeFormSection !== 'certs' ? (
             <div className="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
                 <Award className="w-6 h-6" />
@@ -1278,695 +2320,123 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                 Chứng chỉ online (Coursera, Google, Microsoft) hoặc chứng chỉ ngoại ngữ là điểm cộng rất lớn trên hồ sơ năng lực.
               </p>
-              <button
-                type="button"
-                onClick={openAddCertModal}
-                className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm chứng chỉ đầu tiên</span>
-              </button>
+              {!isPreviewSampleMode && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddCert}
+                  className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm chứng chỉ đầu tiên</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {currentViewData.certificates.map((cert) => (
-                <div
-                  key={cert.id}
-                  className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 flex flex-col justify-between space-y-3 transition-all hover:bg-slate-50"
-                >
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
-                      <Award className="w-5 h-5" />
-                    </div>
+              {currentViewData.certificates.map((cert) => {
+                const isDeletingThis = deletingItemId === cert.id;
 
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <h4 className="font-extrabold text-sm text-slate-900 leading-snug">
-                        {cert.name}
-                      </h4>
-                      <p className="text-xs font-semibold text-blue-700">
-                        {cert.issuer}
-                      </p>
-
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 pt-0.5">
-                        <span>Ngày cấp: {cert.issueDate}</span>
-                        {cert.expiryDate && <span>Hết hạn: {cert.expiryDate}</span>}
+                return (
+                  <div
+                    key={cert.id}
+                    className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 flex flex-col justify-between space-y-3 transition-all hover:bg-slate-50"
+                  >
+                    {/* INLINE DELETE CONFIRMATION BOX (Requirement 5) */}
+                    {isDeletingThis ? (
+                      <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-2 text-rose-900 text-xs font-semibold">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>Xóa chứng chỉ "{cert.name}"?</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setDeletingItemId(null)}
+                            className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Giữ lại
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDeleteCert(cert.id)}
+                            disabled={isSaving}
+                            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+                          >
+                            {isSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                            <Award className="w-5 h-5" />
+                          </div>
 
-                      {cert.credentialId && (
-                        <p className="text-[11px] font-mono text-slate-500">
-                          Mã: {cert.credentialId}
-                        </p>
-                      )}
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <h4 className="font-extrabold text-sm text-slate-900 leading-snug">
+                              {cert.name}
+                            </h4>
+                            <p className="text-xs font-semibold text-blue-700">
+                              {cert.issuer}
+                            </p>
 
-                      {cert.verificationUrl && (
-                        <a
-                          href={cert.verificationUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline pt-0.5"
-                        >
-                          <LinkIcon className="w-3 h-3" />
-                          <span>Xác minh chứng chỉ</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 pt-0.5">
+                              <span>Ngày cấp: {cert.issueDate}</span>
+                              {cert.expiryDate && <span>Hết hạn: {cert.expiryDate}</span>}
+                            </div>
+
+                            {cert.credentialId && (
+                              <p className="text-[11px] font-mono text-slate-500">
+                                Mã: {cert.credentialId}
+                              </p>
+                            )}
+
+                            {cert.verificationUrl && (
+                              <a
+                                href={cert.verificationUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline pt-0.5"
+                              >
+                                <LinkIcon className="w-3 h-3" />
+                                <span>Xác minh chứng chỉ</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        {!isPreviewSampleMode && (
+                          <div className="flex justify-end items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCert(cert)}
+                              className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
+                              title="Sửa chứng chỉ"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Sửa</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingItemId(cert.id)}
+                              className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
+                              title="Xóa chứng chỉ"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Xóa</span>
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-
-                  {/* Actions */}
-                  {!isPreviewSampleMode && (
-                    <div className="flex justify-end items-center gap-1.5 pt-2 border-t border-slate-200/60">
-                      <button
-                        type="button"
-                        onClick={() => openEditCertModal(cert)}
-                        className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
-                        title="Sửa chứng chỉ"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                        <span>Sửa</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCert(cert.id)}
-                        className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
-                        title="Xóa chứng chỉ"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Xóa</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ============================================================= */}
-      {/* MODAL 1: EDUCATION FORM                                        */}
-      {/* ============================================================= */}
-      {isEduModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-slide-up max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-blue-600" />
-                <span>{editingEduId ? 'Chỉnh Sửa Học Vấn' : 'Thêm Quá Trình Học Tập'}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsEduModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdu} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên trường / Cơ sở đào tạo <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={eduForm.school}
-                  onChange={(e) => setEduForm({ ...eduForm, school: e.target.value })}
-                  placeholder="VD: Trường ĐH Bách Khoa TP.HCM hoặc THPT Chuyên Lê Hồng Phong"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Bậc học:</label>
-                  <select
-                    value={eduForm.degreeLevel}
-                    onChange={(e) => setEduForm({ ...eduForm, degreeLevel: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                  >
-                    {DEGREE_LEVELS.map((lvl) => (
-                      <option key={lvl} value={lvl}>
-                        {lvl}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Ngành / Chuyên ngành:
-                  </label>
-                  <input
-                    type="text"
-                    value={eduForm.major || ''}
-                    onChange={(e) => setEduForm({ ...eduForm, major: e.target.value })}
-                    placeholder={eduForm.degreeLevel === 'Học sinh THPT' ? 'Ban Tự nhiên / Chuyên Toán...' : 'VD: Kỹ thuật Phần mềm'}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Bắt đầu:</label>
-                  <input
-                    type="text"
-                    value={eduForm.startDate}
-                    onChange={(e) => setEduForm({ ...eduForm, startDate: e.target.value })}
-                    placeholder="VD: 09/2022"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Kết thúc:</label>
-                  <input
-                    type="text"
-                    disabled={eduForm.isCurrent}
-                    value={eduForm.isCurrent ? 'Đang học' : eduForm.endDate}
-                    onChange={(e) => setEduForm({ ...eduForm, endDate: e.target.value })}
-                    placeholder="VD: 06/2026"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer pt-1">
-                <input
-                  type="checkbox"
-                  checked={eduForm.isCurrent}
-                  onChange={(e) => setEduForm({ ...eduForm, isCurrent: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                />
-                <span className="text-xs text-slate-700 font-semibold">Hiện đang theo học tại trường này</span>
-              </label>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Điểm GPA / Điểm trung bình (không bắt buộc):
-                </label>
-                <input
-                  type="text"
-                  value={eduForm.gpa || ''}
-                  onChange={(e) => setEduForm({ ...eduForm, gpa: e.target.value })}
-                  placeholder="VD: 3.65 / 4.0 hoặc 8.8 / 10"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Môn học / Chuyên đề nổi bật (phân tách bằng dấu phẩy):
-                </label>
-                <input
-                  type="text"
-                  value={eduCourseworkInput}
-                  onChange={(e) => setEduCourseworkInput(e.target.value)}
-                  placeholder="VD: Cấu trúc dữ liệu, Lập trình Web, Thuật toán..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Thành tích & Học bổng (mỗi dòng một thành tích):
-                </label>
-                <textarea
-                  rows={2}
-                  value={eduAchievementsInput}
-                  onChange={(e) => setEduAchievementsInput(e.target.value)}
-                  placeholder="VD: Học bổng Khuyến khích Học tập 2 kỳ liên tiếp"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsEduModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60"
-                >
-                  {isSaving ? 'Đang lưu...' : 'Lưu học vấn'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================= */}
-      {/* MODAL 2: SKILL FORM                                            */}
-      {/* ============================================================= */}
-      {isSkillModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-slide-up">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-blue-600" />
-                <span>{editingSkillId ? 'Chỉnh Sửa Kỹ Năng' : 'Thêm Kỹ Năng Mới'}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsSkillModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveSkill} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên kỹ năng <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={skillForm.name}
-                  onChange={(e) => setSkillForm({ ...skillForm, name: e.target.value })}
-                  placeholder="VD: TypeScript, Làm việc nhóm, Tiếng Anh giao tiếp..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Nhóm kỹ năng:</label>
-                  <select
-                    value={skillForm.category}
-                    onChange={(e) => setSkillForm({ ...skillForm, category: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                  >
-                    {(Object.keys(SKILL_CATEGORY_LABELS) as CompetencySkillCategory[]).map((cat) => (
-                      <option key={cat} value={cat}>
-                        {SKILL_CATEGORY_LABELS[cat].icon} {SKILL_CATEGORY_LABELS[cat].label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Mức độ thành thạo:</label>
-                  <select
-                    value={skillForm.proficiency}
-                    onChange={(e) => setSkillForm({ ...skillForm, proficiency: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                  >
-                    {(Object.keys(PROFICIENCY_LABELS) as CompetencyProficiency[]).map((pKey) => (
-                      <option key={pKey} value={pKey}>
-                        {PROFICIENCY_LABELS[pKey].label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Minh chứng / Cách bạn áp dụng kỹ năng này:
-                </label>
-                <textarea
-                  rows={3}
-                  value={skillForm.evidence || ''}
-                  onChange={(e) => setSkillForm({ ...skillForm, evidence: e.target.value })}
-                  placeholder="VD: Đã hoàn thành 2 đồ án web React, đạt điểm 9.0 môn Lập trình Web hoặc đạt điểm IELTS 6.5..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsSkillModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60"
-                >
-                  {isSaving ? 'Đang lưu...' : 'Lưu kỹ năng'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================= */}
-      {/* MODAL 3: PROJECT FORM                                          */}
-      {/* ============================================================= */}
-      {isProjectModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-slide-up max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <FolderGit2 className="w-5 h-5 text-blue-600" />
-                <span>{editingProjectId ? 'Chỉnh Sửa Đồ Án / Dự Án' : 'Thêm Đồ Án / Dự Án Mới'}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsProjectModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProject} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên đồ án / Dự án STEM / Hoạt động trải nghiệm <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                  placeholder="VD: EcoMart — Sàn giao dịch giáo trình sinh viên"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Vai trò thực hiện:</label>
-                  <input
-                    type="text"
-                    value={projectForm.role}
-                    onChange={(e) => setProjectForm({ ...projectForm, role: e.target.value })}
-                    placeholder="VD: Trưởng nhóm / Lập trình viên chính"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Thời gian thực hiện:</label>
-                  <input
-                    type="text"
-                    value={projectForm.period}
-                    onChange={(e) => setProjectForm({ ...projectForm, period: e.target.value })}
-                    placeholder="VD: 09/2025 - 12/2025"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Mô tả mục tiêu đồ án:</label>
-                <textarea
-                  rows={2}
-                  value={projectForm.description}
-                  onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                  placeholder="VD: Xây dựng nền tảng trao đổi đồ dùng học tập tối ưu tốc độ và bảo mật giao dịch..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Công nghệ / Công cụ sử dụng (phân tách bằng dấu phẩy):
-                </label>
-                <input
-                  type="text"
-                  value={projectTechInput}
-                  onChange={(e) => setProjectTechInput(e.target.value)}
-                  placeholder="VD: React, TypeScript, Tailwind CSS, REST API..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Kết quả đạt được (mỗi dòng một gạch đầu dòng):
-                </label>
-                <textarea
-                  rows={3}
-                  value={projectResultsInput}
-                  onChange={(e) => setProjectResultsInput(e.target.value)}
-                  placeholder="VD: Đạt điểm 9.2/10 môn Đồ án Chuyên ngành&#10;Tối ưu bundle giảm 30% dung lượng tải trang&#10;Hơn 800 sinh viên tham gia dùng thử"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Liên kết minh chứng (GitHub / Drive / Demo):
-                </label>
-                <input
-                  type="text"
-                  value={projectForm.link || ''}
-                  onChange={(e) => setProjectForm({ ...projectForm, link: e.target.value })}
-                  placeholder="https://github.com/username/project"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsProjectModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60"
-                >
-                  {isSaving ? 'Đang lưu...' : 'Lưu đồ án'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================= */}
-      {/* MODAL 4: CERTIFICATE FORM                                     */}
-      {/* ============================================================= */}
-      {isCertModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-slide-up">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Award className="w-5 h-5 text-blue-600" />
-                <span>{editingCertId ? 'Chỉnh Sửa Chứng Chỉ' : 'Thêm Chứng Chỉ Mới'}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsCertModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCert} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên chứng chỉ <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={certForm.name}
-                  onChange={(e) => setCertForm({ ...certForm, name: e.target.value })}
-                  placeholder="VD: Meta Front-End Developer Professional Certificate"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Đơn vị cấp <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={certForm.issuer}
-                  onChange={(e) => setCertForm({ ...certForm, issuer: e.target.value })}
-                  placeholder="VD: Coursera / Google / Meta / British Council"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Ngày cấp (Tháng/Năm):</label>
-                  <input
-                    type="text"
-                    value={certForm.issueDate}
-                    onChange={(e) => setCertForm({ ...certForm, issueDate: e.target.value })}
-                    placeholder="VD: 01/2025"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Ngày hết hạn (nếu có):</label>
-                  <input
-                    type="text"
-                    value={certForm.expiryDate || ''}
-                    onChange={(e) => setCertForm({ ...certForm, expiryDate: e.target.value })}
-                    placeholder="VD: 01/2027 hoặc để trống"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Mã chứng chỉ / Credential ID (nếu có):
-                </label>
-                <input
-                  type="text"
-                  value={certForm.credentialId || ''}
-                  onChange={(e) => setCertForm({ ...certForm, credentialId: e.target.value })}
-                  placeholder="VD: CERT-2025-998877"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Liên kết xác minh (Verification URL):
-                </label>
-                <input
-                  type="text"
-                  value={certForm.verificationUrl || ''}
-                  onChange={(e) => setCertForm({ ...certForm, verificationUrl: e.target.value })}
-                  placeholder="https://coursera.org/verify/..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsCertModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-xs disabled:opacity-60"
-                >
-                  {isSaving ? 'Đang lưu...' : 'Lưu chứng chỉ'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================= */}
-      {/* MODAL 5: SYNC TO CV CONFIRMATION                               */}
-      {/* ============================================================= */}
-      {isSyncModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-slide-up">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Đồng Bộ Sang Phân Hệ Thiết Kế CV
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSyncModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Toàn bộ dữ liệu hồ sơ năng lực đã lưu của bạn sẽ được chuyển sang định dạng CV chuẩn ATS:
-            </p>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 flex items-center gap-1.5">
-                  <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
-                  Học vấn & Đào tạo:
-                </span>
-                <span className="font-bold text-slate-900">{profile.education.length} mục</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-blue-600" />
-                  Kỹ năng chuyên môn & mềm:
-                </span>
-                <span className="font-bold text-slate-900">{profile.skills.length} kỹ năng</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 flex items-center gap-1.5">
-                  <FolderGit2 className="w-3.5 h-3.5 text-blue-600" />
-                  Đồ án & Dự án thực tế:
-                </span>
-                <span className="font-bold text-slate-900">{profile.projects.length} đồ án</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-blue-600" />
-                  Chứng chỉ & Bằng cấp:
-                </span>
-                <span className="font-bold text-slate-900">{profile.certificates.length} chứng chỉ</span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-800 leading-relaxed font-medium">
-              💡 <strong>Bảo vệ dữ liệu:</strong> Thông tin cá nhân, mục tiêu nghề nghiệp và những nội dung bạn đã biên tập riêng trên CV sẽ được giữ nguyên mà không bị mất.
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsSyncModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold text-xs cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSyncToCv}
-                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                {isSyncSuccess ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-300" />
-                    <span>Đã đồng bộ thành công!</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>Xác nhận & Chuyển sang CV</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
