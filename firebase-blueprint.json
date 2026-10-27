@@ -2,7 +2,7 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Core account record for authenticated users.",
+      "description": "Core account record for authenticated users at users/{userId}.",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "Firebase Auth user ID" },
@@ -11,14 +11,14 @@
         "userType": { "type": "string", "description": "Role/Target group: high_school, vocational, college, university, job_seeker" },
         "school": { "type": "string", "description": "School or university name" },
         "major": { "type": "string", "description": "Major of study or specialization" },
-        "createdAt": { "type": "string", "description": "Creation ISO date or server timestamp" },
+        "createdAt": { "type": "string", "description": "Creation ISO date" },
         "updatedAt": { "type": "string", "description": "Last update timestamp" }
       },
       "required": ["uid", "email", "fullName", "userType"]
     },
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Extended user profile information and career preferences.",
+      "description": "Extended user profile information and career preferences at user_profiles/{userId}.",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "Firebase Auth user ID" },
@@ -35,7 +35,7 @@
     },
     "CvDocument": {
       "title": "CvDocument",
-      "description": "A saved CV profile belonging to a user.",
+      "description": "A saved CV document stored at users/{userId}/cvs/{cvId}.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Document ID" },
@@ -44,18 +44,19 @@
         "templateId": { "type": "string", "description": "Selected template identifier" },
         "targetRole": { "type": "string", "description": "Target job position" },
         "cvData": { "type": "object", "description": "Full structured CV data payload" },
-        "photoUrl": { "type": "string", "description": "CV portrait photo data or link" },
+        "photoUrl": { "type": "string", "description": "CV portrait photo link or placeholder" },
         "showPhoto": { "type": "boolean", "description": "Flag whether photo is displayed on CV" },
-        "photoShape": { "type": "string", "description": "Photo framing style: circle or rounded" },
+        "photoShape": { "type": "string", "description": "Photo framing style: circle, rounded, or square" },
+        "themeConfig": { "type": "object", "description": "Custom color, font, and section visibility settings" },
         "isDefault": { "type": "boolean", "description": "Whether this is the primary default CV" },
         "createdAt": { "type": "string", "description": "Creation timestamp" },
         "updatedAt": { "type": "string", "description": "Last modification timestamp" }
       },
-      "required": ["uid", "cvName", "cvData"]
+      "required": ["uid", "cvName", "templateId", "cvData"]
     },
     "InterviewSession": {
       "title": "InterviewSession",
-      "description": "A recorded AI mock interview practice session with Chị An.",
+      "description": "A recorded AI mock interview practice session stored at users/{userId}/interviews/{interviewId}.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Document ID" },
@@ -63,17 +64,18 @@
         "career": { "type": "string", "description": "Field or domain" },
         "position": { "type": "string", "description": "Position applied for" },
         "level": { "type": "string", "description": "Experience level (intern, fresher, junior...)" },
-        "questionCount": { "type": "number", "description": "Total question count (5, 10, or 15)" },
+        "questionCount": { "type": "number", "description": "Total question count" },
         "mode": { "type": "string", "description": "Practice mode: voice or text" },
         "status": { "type": "string", "description": "Status: in_progress, completed, abandoned" },
         "score": { "type": "number", "description": "Overall score out of 100" },
-        "overallFeedback": { "type": "string", "description": "Chị An's summary feedback" },
-        "strengths": { "type": "array", "description": "List of observed candidate strengths" },
-        "improvements": { "type": "array", "description": "List of areas for candidate improvement" },
-        "actionPlan": { "type": "array", "description": "Recommended concrete next actions" },
-        "qaList": { "type": "array", "description": "List of question, answer, and instant feedback items" },
-        "createdAt": { "type": "string", "description": "Start timestamp" },
-        "updatedAt": { "type": "string", "description": "Completion or last update timestamp" }
+        "overallVerdict": { "type": "string", "description": "Summary feedback verdict" },
+        "exchanges": { "type": "array", "description": "Questions, user answers, and evaluation details" },
+        "strengths": { "type": "array", "description": "Observed candidate strengths" },
+        "improvements": { "type": "array", "description": "Areas for candidate improvement" },
+        "actionPlan": { "type": "array", "description": "Concrete next steps" },
+        "durationSeconds": { "type": "number", "description": "Total duration in seconds" },
+        "createdAt": { "type": "string", "description": "Session timestamp" },
+        "updatedAt": { "type": "string", "description": "Last modification timestamp" }
       },
       "required": ["uid", "career", "position", "level", "status"]
     }
@@ -83,17 +85,25 @@
       "schema": "User",
       "description": "User account record tied to their auth UID."
     },
+    "/users/{userId}/cvs/{cvId}": {
+      "schema": "CvDocument",
+      "description": "Subcollection of CVs owned by individual user."
+    },
+    "/users/{userId}/interviews/{interviewId}": {
+      "schema": "InterviewSession",
+      "description": "Subcollection of mock interview sessions conducted by the user."
+    },
     "/user_profiles/{userId}": {
       "schema": "UserProfile",
       "description": "User personal details and preferences."
     },
     "/cv_documents/{cvId}": {
       "schema": "CvDocument",
-      "description": "Collection of CVs owned by individual users."
+      "description": "Legacy collection of CVs."
     },
     "/interview_sessions/{sessionId}": {
       "schema": "InterviewSession",
-      "description": "Mock interview sessions conducted by the user."
+      "description": "Legacy collection of mock interview sessions."
     }
   }
 }

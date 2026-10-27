@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Printer,
-  Download,
   Sparkles,
   Edit3,
   Eye,
@@ -292,59 +291,10 @@ export const ResumeBuilder: React.FC<ResumeBuilderProps> = ({
 
   const handleExportWord = () => {
     try {
-      exportCvToWord(cvData, currentTemplateMeta.name);
+      exportCvToWord(cvData, currentTemplateMeta.name, 'docx');
     } catch (err: any) {
       alert(`Lỗi khi xuất Word: ${err?.message || 'Có lỗi xảy ra'}`);
     }
-  };
-
-  const handleDownloadMarkdown = () => {
-    const md = `# ${cvData.contact.fullName}
-**${cvData.contact.title}**
-Email: ${cvData.contact.email} | SĐT: ${cvData.contact.phone} | Địa chỉ: ${cvData.contact.location}
-LinkedIn: ${cvData.contact.linkedin || ''} | GitHub: ${cvData.contact.github || ''}
-
-## Tóm tắt chuyên môn (Professional Summary)
-${cvData.summary}
-
-## Kỹ năng chuyên môn
-- Kỹ thuật & Frameworks: ${cvData.skills.technical.join(', ')}
-- Nền tảng cốt lõi: ${cvData.skills.core.join(', ')}
-- Công cụ: ${cvData.skills.tools.join(', ')}
-- Kỹ năng mềm: ${cvData.skills.soft.join(', ')}
-- Ngoại ngữ: ${cvData.languages.join(', ')}
-
-## Học vấn
-${cvData.education
-  .map(
-    (e) => `### ${e.school}
-${e.degree} - ${e.major} (${e.year}) | GPA: ${e.gpa || 'N/A'}
-Môn học: ${(e.coursework || []).join(', ')}`
-  )
-  .join('\n\n')}
-
-## Đồ án tiêu biểu (Kinh nghiệm thực tiễn)
-${cvData.projects
-  .map(
-    (p) => `### ${p.name} — ${p.role} (${p.period})
-**Công nghệ:** ${p.techStack.join(', ')}
-*Mục tiêu:* ${p.objective}
-${p.bulletPoints.map((b) => `- ${b}`).join('\n')}`
-  )
-  .join('\n\n')}
-
-## Hoạt động & Thành tích
-${cvData.activities.map((a) => `- **${a.name}** (${a.role}, ${a.period}): ${a.impact}`).join('\n')}
-${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
-`;
-
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${cvData.contact.fullName.replace(/\s+/g, '_')}_CV.md`;
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleGenerateCvWithAi = async () => {
@@ -556,30 +506,28 @@ ${cvData.achievements.map((ach) => `- ${ach}`).join('\n')}
               <span>Mẫu</span>
             </button>
 
-            <button
-              onClick={handleExportWord}
-              className="text-xs px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold border border-blue-200 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Xuất file Microsoft Word (.doc) có thể chỉnh sửa"
-            >
-              <FileDown className="w-3.5 h-3.5 text-blue-600" />
-              <span>Xuất Word (.doc)</span>
-            </button>
+            {/* Export Action Group: Word (.docx) & PDF (.pdf) */}
+            <div className="flex items-center gap-1.5 pl-1 sm:pl-2 sm:border-l border-slate-200">
+              <button
+                type="button"
+                onClick={handleExportWord}
+                className="text-xs px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold border border-blue-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Xuất file Microsoft Word (.docx) giữ nguyên hình ảnh và tiếng Việt"
+              >
+                <FileDown className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>Xuất Word (.docx)</span>
+              </button>
 
-            <button
-              onClick={handlePrint}
-              className="text-xs px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>In / Xuất PDF</span>
-            </button>
-
-            <button
-              onClick={handleDownloadMarkdown}
-              className="text-xs px-2 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold border border-slate-200 hidden xl:flex cursor-pointer"
-              title="Tải Markdown"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="text-xs px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                title="In hoặc lưu thành tệp PDF chuẩn A4"
+              >
+                <Printer className="w-3.5 h-3.5 shrink-0" />
+                <span>In / Xuất PDF</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

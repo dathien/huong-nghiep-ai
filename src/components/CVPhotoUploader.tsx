@@ -596,11 +596,13 @@ export const CVPhotoUploader: React.FC<CVPhotoUploaderProps> = ({
             </div>
           )}
 
-          {/* Formats and Size guidance hint */}
-          <div className="text-[10px] text-slate-500 leading-normal">
-            <span>• Hỗ trợ định dạng: JPG, JPEG, PNG, WebP (Tối đa 5 MB).</span>
-            <br />
-            <span>• Chuẩn ảnh công sở / học đường: Ánh sáng rõ, trang phục lịch sự, nhìn thẳng.</span>
+          {/* Formats, Size and Storage guidance hint */}
+          <div className="text-[10px] text-slate-500 leading-normal space-y-1">
+            <p>• Hỗ trợ định dạng: JPG, JPEG, PNG, WebP (Tối đa 5 MB).</p>
+            <p>• Chuẩn ảnh công sở / học đường: Ánh sáng rõ, trang phục lịch sự, nhìn thẳng.</p>
+            <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-1.5 font-medium leading-relaxed">
+              💡 <strong>Lưu ý:</strong> Ảnh chân dung được lưu trữ trong IndexedDB của thiết bị này theo phương án miễn phí. Ảnh chưa tự động đồng bộ khi chuyển sang thiết bị khác.
+            </p>
           </div>
         </div>
       </div>

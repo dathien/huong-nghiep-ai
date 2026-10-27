@@ -30,53 +30,77 @@ export interface CVDoc {
   updatedAt: string;
 }
 
-const COLLECTION_NAME = 'cv_documents';
+// Subcollection helper: users/{uid}/cvs
+const getUserCvsRef = (uid: string) => collection(db, 'users', uid, 'cvs');
+const getCvDocRef = (uid: string, cvId: string) => doc(db, 'users', uid, 'cvs', cvId);
 
 export const subscribeUserCVs = (
   uid: string,
   onData: (cvs: CVDoc[]) => void,
   onError?: (err: any) => void
 ) => {
-  const q = query(collection(db, COLLECTION_NAME), where('uid', '==', uid));
+  const cvsColRef = getUserCvsRef(uid);
 
   return onSnapshot(
-    q,
-    (snapshot) => {
+    cvsColRef,
+    async (snapshot) => {
       const cvs: CVDoc[] = [];
-      snapshot.forEach((doc) => {
-        cvs.push({ ...doc.data(), id: doc.id } as CVDoc);
+      snapshot.forEach((docSnap) => {
+        cvs.push({ ...docSnap.data(), id: docSnap.id } as CVDoc);
       });
-      // Sort in-memory to prevent complex composite index requirements
+
+      // Migration fallback: If subcollection is empty, check legacy root collection 'cv_documents'
+      if (cvs.length === 0) {
+        try {
+          const legacyQuery = query(collection(db, 'cv_documents'), where('uid', '==', uid));
+          const legacySnap = await getDocs(legacyQuery);
+          if (!legacySnap.empty) {
+            for (const legDoc of legacySnap.docs) {
+              const legData = legDoc.data() as CVDoc;
+              const migratedDoc: CVDoc = {
+                ...legData,
+                id: legDoc.id,
+                uid,
+              };
+              await setDoc(getCvDocRef(uid, legDoc.id), migratedDoc);
+              cvs.push(migratedDoc);
+            }
+          }
+        } catch (migErr) {
+          console.warn('Legacy CV migration check completed without hits:', migErr);
+        }
+      }
+
+      // Sort in-memory to prevent requiring composite indexes
       cvs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       onData(cvs);
     },
     (error) => {
-      console.error('Error subscribing to CVs:', error);
+      console.error('Error subscribing to user CVs:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, COLLECTION_NAME);
+      handleFirestoreError(error, OperationType.LIST, `users/${uid}/cvs`);
     }
   );
 };
 
 export const getUserCVs = async (uid: string): Promise<CVDoc[]> => {
   try {
-    const q = query(collection(db, COLLECTION_NAME), where('uid', '==', uid));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(getUserCvsRef(uid));
     const cvs: CVDoc[] = [];
-    snapshot.forEach((doc) => {
-      cvs.push({ ...doc.data(), id: doc.id } as CVDoc);
+    snapshot.forEach((docSnap) => {
+      cvs.push({ ...docSnap.data(), id: docSnap.id } as CVDoc);
     });
     cvs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     return cvs;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, COLLECTION_NAME);
+    handleFirestoreError(error, OperationType.LIST, `users/${uid}/cvs`);
   }
 };
 
 export const saveCV = async (uid: string, cvDoc: CVDoc): Promise<void> => {
-  const path = `${COLLECTION_NAME}/${cvDoc.id}`;
+  const path = `users/${uid}/cvs/${cvDoc.id}`;
   try {
-    const docRef = doc(db, COLLECTION_NAME, cvDoc.id);
+    const docRef = getCvDocRef(uid, cvDoc.id);
     const payload: CVDoc = {
       ...cvDoc,
       uid,
@@ -91,7 +115,7 @@ export const saveCV = async (uid: string, cvDoc: CVDoc): Promise<void> => {
 export const createCV = async (
   uid: string,
   cvName: string,
-  templateId: CVTemplateId | string = 'ats-classic',
+  templateId: CVTemplateId | string = 'student-starter',
   customData?: CVData,
   isDefault: boolean = false
 ): Promise<CVDoc> => {
@@ -112,9 +136,9 @@ export const createCV = async (
     updatedAt: now,
   };
 
-  const path = `${COLLECTION_NAME}/${id}`;
+  const path = `users/${uid}/cvs/${id}`;
   try {
-    await setDoc(doc(db, COLLECTION_NAME, id), newCV);
+    await setDoc(getCvDocRef(uid, id), newCV);
     return newCV;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
@@ -135,9 +159,9 @@ export const duplicateCV = async (uid: string, sourceCV: CVDoc): Promise<CVDoc> 
     updatedAt: now,
   };
 
-  const path = `${COLLECTION_NAME}/${id}`;
+  const path = `users/${uid}/cvs/${id}`;
   try {
-    await setDoc(doc(db, COLLECTION_NAME, id), clonedCV);
+    await setDoc(getCvDocRef(uid, id), clonedCV);
     return clonedCV;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
@@ -145,9 +169,9 @@ export const duplicateCV = async (uid: string, sourceCV: CVDoc): Promise<CVDoc> 
 };
 
 export const renameCV = async (uid: string, cvId: string, newName: string): Promise<void> => {
-  const path = `${COLLECTION_NAME}/${cvId}`;
+  const path = `users/${uid}/cvs/${cvId}`;
   try {
-    await updateDoc(doc(db, COLLECTION_NAME, cvId), {
+    await updateDoc(getCvDocRef(uid, cvId), {
       cvName: newName.trim(),
       updatedAt: new Date().toISOString(),
     });
@@ -161,20 +185,20 @@ export const setDefaultCV = async (uid: string, cvId: string): Promise<void> => 
     const allCvs = await getUserCVs(uid);
     for (const cv of allCvs) {
       if (cv.id === cvId && !cv.isDefault) {
-        await updateDoc(doc(db, COLLECTION_NAME, cv.id), { isDefault: true });
+        await updateDoc(getCvDocRef(uid, cv.id), { isDefault: true });
       } else if (cv.id !== cvId && cv.isDefault) {
-        await updateDoc(doc(db, COLLECTION_NAME, cv.id), { isDefault: false });
+        await updateDoc(getCvDocRef(uid, cv.id), { isDefault: false });
       }
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${cvId}`);
+    handleFirestoreError(error, OperationType.UPDATE, `users/${uid}/cvs/${cvId}`);
   }
 };
 
 export const deleteCV = async (uid: string, cvId: string): Promise<void> => {
-  const path = `${COLLECTION_NAME}/${cvId}`;
+  const path = `users/${uid}/cvs/${cvId}`;
   try {
-    await deleteDoc(doc(db, COLLECTION_NAME, cvId));
+    await deleteDoc(getCvDocRef(uid, cvId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
