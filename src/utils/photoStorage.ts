@@ -11,7 +11,7 @@ const PHOTO_KEY = 'portrait_photo';
 export interface StoredCVPhoto {
   dataUrl: string;
   originalUrl?: string;
-  shape: 'circle' | 'rounded';
+  shape: 'circle' | 'rounded' | 'square';
   visible: boolean;
   zoom: number;
   cropX: number;

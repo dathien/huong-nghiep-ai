@@ -9,9 +9,16 @@ import {
   CheckCircle,
   Clock,
   BookOpen,
-  Award
+  Award,
+  LogIn,
+  LogOut,
+  FileText,
+  Mic,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
 import { StudentLevel } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
   studentLevel: StudentLevel;
@@ -26,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar,
   onNavigateTab,
 }) => {
+  const { currentUser, userAccount, userProfile, openAuthModal, logout, openProfileModal } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -66,6 +74,16 @@ export const Header: React.FC<HeaderProps> = ({
     'Sinh viên đại học',
   ];
 
+  const displayName = userAccount?.fullName || currentUser?.displayName || 'Học viên';
+  const displayEmail = currentUser?.email || '';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(-2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase() || 'CV';
+
   return (
     <header className="h-[72px] bg-white border-b border-slate-200/90 sticky top-0 z-40 px-4 sm:px-6 flex items-center justify-between shadow-xs no-print">
       {/* Left: Mobile hamburger & Logo with tagline */}
@@ -104,10 +122,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Student Level Switcher, Notifications & Profile */}
+      {/* Right: Student Level Switcher, Notifications & Auth/Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Education Level Selector */}
-        <div className="relative">
+        <div className="relative hidden sm:block">
           <select
             value={studentLevel}
             onChange={(e) => setStudentLevel(e.target.value as StudentLevel)}
@@ -178,75 +196,125 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* User Profile Mini Card */}
-        <div className="relative">
-          <button
-            onClick={() => {
-              setShowUserMenu(!showUserMenu);
-              setShowNotifications(false);
-            }}
-            className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
-              NA
-            </div>
-            <div className="text-left hidden md:block">
-              <span className="text-xs font-bold text-slate-800 block leading-tight">
-                Nguyễn Minh Anh
-              </span>
-              <span className="text-[11px] text-slate-500 font-medium">
-                {studentLevel}
-              </span>
-            </div>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
-          </button>
-
-          {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-60 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 space-y-2 z-50 animate-slide-up">
-              <div className="px-2 py-1.5 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-800">Nguyễn Minh Anh</p>
-                <p className="text-[11px] text-slate-500">minhanh.student@edu.vn</p>
+        {/* AUTH BUTTONS OR USER MENU */}
+        {!currentUser ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openAuthModal('login', 'Đăng nhập để đồng bộ hồ sơ, lưu CV và xem lịch sử phỏng vấn.')}
+              className="px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-blue-600 hover:bg-blue-50/70 border border-slate-200 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Đăng nhập</span>
+            </button>
+            <button
+              onClick={() => openAuthModal('register', 'Tạo tài khoản miễn phí để nhận trọn bộ công cụ hướng nghiệp cùng Chị An!')}
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs shadow-blue-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Đăng ký</span>
+              <span className="sm:hidden">Mới</span>
+            </button>
+          </div>
+        ) : (
+          /* User Profile Dropdown */
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowUserMenu(!showUserMenu);
+                setShowNotifications(false);
+              }}
+              className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                {initials}
               </div>
-
-              <div className="space-y-1 text-xs font-medium text-slate-700">
-                <button
-                  onClick={() => {
-                    onNavigateTab('competency-profile');
-                    setShowUserMenu(false);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2"
-                >
-                  <User className="w-4 h-4 text-slate-400" />
-                  <span>Hồ sơ năng lực của tôi</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigateTab('cv-builder');
-                    setShowUserMenu(false);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2"
-                >
-                  <BookOpen className="w-4 h-4 text-slate-400" />
-                  <span>Quản lý bản thảo CV</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigateTab('career-roadmap');
-                    setShowUserMenu(false);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4 text-slate-400" />
-                  <span>Tiến độ lộ trình học tập</span>
-                </button>
+              <div className="text-left hidden md:block">
+                <span className="text-xs font-bold text-slate-800 block leading-tight max-w-[120px] truncate">
+                  {displayName}
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {studentLevel}
+                </span>
               </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+            </button>
 
-              <div className="pt-2 border-t border-slate-100 px-2 text-[11px] text-slate-400">
-                Tài khoản Học sinh/Sinh viên • Miễn phí
+            {showUserMenu && (
+              <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 space-y-2 z-50 animate-slide-up">
+                <div className="px-2 py-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-slate-900 truncate">{displayName}</p>
+                    {currentUser.emailVerified && (
+                      <span title="Tài khoản đã xác thực">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate">{displayEmail}</p>
+                  <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                    {userAccount?.school || 'Thành viên CareerMaster'}
+                  </span>
+                </div>
+
+                <div className="space-y-1 text-xs font-medium text-slate-700">
+                  <button
+                    onClick={() => {
+                      openProfileModal();
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span>Hồ sơ cá nhân</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigateTab('cv-builder');
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <span>CV của tôi (Đa bản lưu)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigateTab('interview-practice');
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Mic className="w-4 h-4 text-slate-400" />
+                    <span>Lịch sử phỏng vấn Chị An</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigateTab('career-roadmap');
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle className="w-4 h-4 text-slate-400" />
+                    <span>Tiến độ lộ trình học tập</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <button
+                    onClick={async () => {
+                      setShowUserMenu(false);
+                      await logout();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 font-semibold text-xs flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Đăng xuất an toàn</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

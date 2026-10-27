@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core account record for authenticated users.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth user ID" },
+        "email": { "type": "string", "description": "User email address" },
+        "fullName": { "type": "string", "description": "Full display name" },
+        "userType": { "type": "string", "description": "Role/Target group: high_school, vocational, college, university, job_seeker" },
+        "school": { "type": "string", "description": "School or university name" },
+        "major": { "type": "string", "description": "Major of study or specialization" },
+        "createdAt": { "type": "string", "description": "Creation ISO date or server timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["uid", "email", "fullName", "userType"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Extended user profile information and career preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth user ID" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "avatarUrl": { "type": "string", "description": "Profile picture URL" },
+        "educationLevel": { "type": "string", "description": "Education stage" },
+        "careerGoal": { "type": "string", "description": "Target career goal" },
+        "bio": { "type": "string", "description": "Short self-introduction" },
+        "targetIndustry": { "type": "string", "description": "Target working industry" },
+        "skills": { "type": "array", "description": "List of core skills" },
+        "updatedAt": { "type": "string", "description": "Last profile update timestamp" }
+      },
+      "required": ["uid"]
+    },
+    "CvDocument": {
+      "title": "CvDocument",
+      "description": "A saved CV profile belonging to a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "uid": { "type": "string", "description": "Owner user ID" },
+        "cvName": { "type": "string", "description": "Name/label of this CV" },
+        "templateId": { "type": "string", "description": "Selected template identifier" },
+        "targetRole": { "type": "string", "description": "Target job position" },
+        "cvData": { "type": "object", "description": "Full structured CV data payload" },
+        "photoUrl": { "type": "string", "description": "CV portrait photo data or link" },
+        "showPhoto": { "type": "boolean", "description": "Flag whether photo is displayed on CV" },
+        "photoShape": { "type": "string", "description": "Photo framing style: circle or rounded" },
+        "isDefault": { "type": "boolean", "description": "Whether this is the primary default CV" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last modification timestamp" }
+      },
+      "required": ["uid", "cvName", "cvData"]
+    },
+    "InterviewSession": {
+      "title": "InterviewSession",
+      "description": "A recorded AI mock interview practice session with Chị An.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "uid": { "type": "string", "description": "User ID of candidate" },
+        "career": { "type": "string", "description": "Field or domain" },
+        "position": { "type": "string", "description": "Position applied for" },
+        "level": { "type": "string", "description": "Experience level (intern, fresher, junior...)" },
+        "questionCount": { "type": "number", "description": "Total question count (5, 10, or 15)" },
+        "mode": { "type": "string", "description": "Practice mode: voice or text" },
+        "status": { "type": "string", "description": "Status: in_progress, completed, abandoned" },
+        "score": { "type": "number", "description": "Overall score out of 100" },
+        "overallFeedback": { "type": "string", "description": "Chị An's summary feedback" },
+        "strengths": { "type": "array", "description": "List of observed candidate strengths" },
+        "improvements": { "type": "array", "description": "List of areas for candidate improvement" },
+        "actionPlan": { "type": "array", "description": "Recommended concrete next actions" },
+        "qaList": { "type": "array", "description": "List of question, answer, and instant feedback items" },
+        "createdAt": { "type": "string", "description": "Start timestamp" },
+        "updatedAt": { "type": "string", "description": "Completion or last update timestamp" }
+      },
+      "required": ["uid", "career", "position", "level", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account record tied to their auth UID."
+    },
+    "/user_profiles/{userId}": {
+      "schema": "UserProfile",
+      "description": "User personal details and preferences."
+    },
+    "/cv_documents/{cvId}": {
+      "schema": "CvDocument",
+      "description": "Collection of CVs owned by individual users."
+    },
+    "/interview_sessions/{sessionId}": {
+      "schema": "InterviewSession",
+      "description": "Mock interview sessions conducted by the user."
+    }
+  }
+}

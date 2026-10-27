@@ -11,10 +11,13 @@ import { MockInterviewer } from './components/MockInterviewer';
 import { CareerRoadmap } from './components/CareerRoadmap';
 import { ChiAnGuide } from './components/ChiAnMascot';
 import { Footer } from './components/Footer';
+import { AuthModal } from './components/AuthModal';
+import { UserProfileModal } from './components/UserProfileModal';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppTab, CVData, StudentLevel } from './types';
 import { SAMPLE_DEFAULT_CV } from './data/mockData';
 
-export default function App() {
+function MainAppContent() {
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
   const [studentLevel, setStudentLevel] = useState<StudentLevel>('Sinh viên đại học');
   const [cvData, setCvData] = useState<CVData>(SAMPLE_DEFAULT_CV);
@@ -139,6 +142,18 @@ export default function App() {
           <Footer />
         </div>
       </div>
+
+      {/* Global Auth & Profile Modals */}
+      <AuthModal />
+      <UserProfileModal />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainAppContent />
+    </AuthProvider>
   );
 }

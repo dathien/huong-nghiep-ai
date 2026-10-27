@@ -42,7 +42,7 @@ export const CVPhotoUploader: React.FC<CVPhotoUploaderProps> = ({
   const [zoom, setZoom] = useState<number>(photo?.zoom || 1.15);
   const [panX, setPanX] = useState<number>(photo?.cropX || 0);
   const [panY, setPanY] = useState<number>(photo?.cropY || 0);
-  const [shape, setShape] = useState<'circle' | 'rounded'>(photo?.shape || 'circle');
+  const [shape, setShape] = useState<'circle' | 'rounded' | 'square'>(photo?.shape || 'circle');
   const [visible, setVisible] = useState<boolean>(photo?.visible ?? true);
 
   // Dragging state

@@ -15,16 +15,40 @@ import {
   ShieldAlert,
   ArrowRight,
   Clock,
-  UserCheck
+  UserCheck,
+  History,
+  Calendar,
+  TrendingUp,
+  Check,
+  Trash2,
+  Eye,
+  LogIn
 } from 'lucide-react';
 import { InterviewExchange, InterviewEvaluation, StudentLevel } from '../types';
 import { ChiAnCharacter } from './ChiAnMascot';
+import { useAuth } from '../context/AuthContext';
+import {
+  SavedInterviewSession,
+  subscribeUserInterviews,
+  saveInterviewSession,
+  deleteInterviewSession,
+} from '../services/interviewService';
+import { InterviewDetailModal } from './InterviewDetailModal';
 
 interface MockInterviewerProps {
   studentLevel: StudentLevel;
 }
 
 export const MockInterviewer: React.FC<MockInterviewerProps> = ({ studentLevel }) => {
+  const { currentUser, openAuthModal } = useAuth();
+
+  // Navigation sub-tab: 'interview' or 'history'
+  const [viewMode, setViewMode] = useState<'interview' | 'history'>('interview');
+  const [historyList, setHistoryList] = useState<SavedInterviewSession[]>([]);
+  const [selectedDetailSession, setSelectedDetailSession] = useState<SavedInterviewSession | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false);
+
   // Setup state
   const [inSession, setInSession] = useState(false);
   const [company, setCompany] = useState('FPT Software / VNG / Viettel');
@@ -46,6 +70,20 @@ export const MockInterviewer: React.FC<MockInterviewerProps> = ({ studentLevel }
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [overallVerdict, setOverallVerdict] = useState('');
+
+  // Subscribe to user interview history
+  useEffect(() => {
+    if (!currentUser) {
+      setHistoryList([]);
+      return;
+    }
+    const unsub = subscribeUserInterviews(
+      currentUser.uid,
+      (sessions) => setHistoryList(sessions),
+      (err) => console.error('Interview history subscription error', err)
+    );
+    return () => unsub();
+  }, [currentUser]);
 
   // Timer
   const [secondsElapsed, setSecondsElapsed] = useState(0);
@@ -198,7 +236,38 @@ export const MockInterviewer: React.FC<MockInterviewerProps> = ({ studentLevel }
 
       if (data.isFinished || !data.nextQuestion) {
         setIsFinished(true);
-        setOverallVerdict(data.overallVerdict || 'Buổi phỏng vấn đã hoàn tất với kết quả ấn tượng!');
+        const verdict = data.overallVerdict || 'Buổi phỏng vấn đã hoàn tất với kết quả ấn tượng!';
+        setOverallVerdict(verdict);
+
+        const allExchanges = [...exchanges, newExchange];
+        const totalScore = allExchanges.reduce(
+          (sum, item) => sum + (item.evaluation?.recruiterScore || 80),
+          0
+        );
+        const calculatedScore = Math.round(totalScore / allExchanges.length);
+
+        if (currentUser) {
+          try {
+            await saveInterviewSession(currentUser.uid, {
+              career: 'IT / Engineering',
+              position: role,
+              company,
+              level: studentLevel,
+              difficulty,
+              style,
+              questionCount: allExchanges.length,
+              mode: 'text',
+              status: 'completed',
+              score: calculatedScore,
+              overallVerdict: verdict,
+              durationSeconds: secondsElapsed,
+              exchanges: allExchanges,
+            });
+            setHasSavedCurrentSession(true);
+          } catch (e) {
+            console.error('Failed to auto-save interview session', e);
+          }
+        }
       } else {
         setCurrentQuestion(data.nextQuestion);
       }
@@ -206,6 +275,62 @@ export const MockInterviewer: React.FC<MockInterviewerProps> = ({ studentLevel }
       alert(`Lỗi: ${err?.message || 'Có lỗi xảy ra'}`);
     } finally {
       setIsEvaluating(false);
+    }
+  };
+
+  const handleRetakeSession = (session: SavedInterviewSession) => {
+    setCompany(session.company);
+    setRole(session.position);
+    setDifficulty(session.difficulty);
+    setStyle(session.style);
+    setViewMode('interview');
+    setInSession(false);
+    setIsFinished(false);
+    setExchanges([]);
+    setCurrentQuestion('');
+    setHasSavedCurrentSession(false);
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!currentUser) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa bản ghi buổi phỏng vấn này không?')) return;
+    try {
+      await deleteInterviewSession(currentUser.uid, sessionId);
+    } catch (e: any) {
+      alert(`Lỗi khi xóa: ${e.message}`);
+    }
+  };
+
+  const handleManualSaveSession = async () => {
+    if (!currentUser) {
+      openAuthModal('login', 'Đăng nhập để lưu kết quả buổi phỏng vấn vào hồ sơ cá nhân.');
+      return;
+    }
+    const totalScore = exchanges.reduce(
+      (sum, item) => sum + (item.evaluation?.recruiterScore || 80),
+      0
+    );
+    const calculatedScore = Math.max(70, Math.round(totalScore / (exchanges.length || 1)));
+
+    try {
+      await saveInterviewSession(currentUser.uid, {
+        career: 'IT / Engineering',
+        position: role,
+        company,
+        level: studentLevel,
+        difficulty,
+        style,
+        questionCount: exchanges.length,
+        mode: 'text',
+        status: 'completed',
+        score: calculatedScore,
+        overallVerdict: overallVerdict || 'Buổi phỏng vấn đã hoàn tất!',
+        durationSeconds: secondsElapsed,
+        exchanges,
+      });
+      setHasSavedCurrentSession(true);
+    } catch (err: any) {
+      alert(`Lỗi khi lưu kết quả: ${err.message}`);
     }
   };
 
@@ -217,7 +342,55 @@ export const MockInterviewer: React.FC<MockInterviewerProps> = ({ studentLevel }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-fade-in">
-      {!inSession ? (
+      {/* Top Sub-Nav: Interview Room vs Interview History */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-2.5 shadow-xs no-print">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+          <button
+            type="button"
+            onClick={() => setViewMode('interview')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'interview'
+                ? 'bg-white text-blue-600 shadow-xs'
+                : 'hover:text-slate-900 text-slate-600'
+            }`}
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span>Phòng Phỏng Vấn Giả Lập</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('history')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'history'
+                ? 'bg-white text-blue-600 shadow-xs'
+                : 'hover:text-slate-900 text-slate-600'
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Lịch Sử Phỏng Vấn Của Tôi</span>
+            {currentUser && (
+              <span className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
+                {historyList.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {currentUser && historyList.length > 0 && (
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 pr-2">
+            <TrendingUp className="w-4 h-4 text-emerald-500" />
+            <span>
+              Điểm cao nhất:{' '}
+              <strong className="text-slate-800">
+                {Math.max(...historyList.map((s) => s.score))}/100
+              </strong>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {viewMode === 'interview' && (
+        !inSession ? (
         /* SETUP INTERVIEW VIEW */
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
           <div>
@@ -545,16 +718,242 @@ export const MockInterviewer: React.FC<MockInterviewerProps> = ({ studentLevel }
               <p className="text-sm text-slate-600 max-w-xl mx-auto leading-relaxed">
                 {overallVerdict}
               </p>
+
+              {/* Account sync badge / CTA */}
+              {currentUser ? (
+                hasSavedCurrentSession ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Đã tự động lưu kết quả buổi phỏng vấn vào Lịch sử tài khoản của bạn.</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleManualSaveSession}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                  >
+                    Lưu kết quả này vào hồ sơ
+                  </button>
+                )
+              ) : (
+                <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-4 max-w-md mx-auto space-y-2 text-center">
+                  <p className="text-xs text-blue-900 font-bold">
+                    💡 Bạn muốn lưu lại kết quả và đánh giá STAR này vào hồ sơ cá nhân?
+                  </p>
+                  <button
+                    onClick={() =>
+                      openAuthModal('login', 'Đăng nhập để lưu kết quả buổi phỏng vấn vào hồ sơ cá nhân.')
+                    }
+                    className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                  >
+                    Đăng nhập hoặc Đăng ký để lưu
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setInSession(false);
+                    setIsFinished(false);
+                    setExchanges([]);
+                    setCurrentQuestion('');
+                    setHasSavedCurrentSession(false);
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                >
+                  Luyện tập lượt phỏng vấn mới cùng Chị An
+                </button>
+
+                {currentUser && (
+                  <button
+                    onClick={() => setViewMode('history')}
+                    className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer transition-colors"
+                  >
+                    Xem lịch sử các buổi luyện tập
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {viewMode === 'history' && (
+        /* ================= HISTORY VIEW ================= */
+        <div className="space-y-6">
+          {!currentUser ? (
+            /* Guest Prompt in History */
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 text-center space-y-5 shadow-xs flex flex-col items-center">
+              <ChiAnCharacter height={160} state="welcome" interactive={false} />
+              <div className="max-w-md space-y-2">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  Theo Dõi Lịch Sử Phỏng Vấn Cùng Chị An
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+                  Đăng nhập tài khoản để Chị An lưu lại từng buổi luyện tập, điểm số cấu trúc STAR,
+                  nhận xét chi tiết và theo dõi sự tiến bộ rõ rệt của em!
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() =>
+                    openAuthModal('login', 'Đăng nhập để xem lịch sử phỏng vấn và nhận xét từ Chị An.')
+                  }
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Đăng nhập ngay</span>
+                </button>
+                <button
+                  onClick={() =>
+                    openAuthModal('register', 'Đăng ký tài khoản miễn phí để lưu lịch sử phỏng vấn.')
+                  }
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer transition-colors"
+                >
+                  Tạo tài khoản miễn phí
+                </button>
+              </div>
+            </div>
+          ) : historyList.length === 0 ? (
+            /* Empty History State */
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xs flex flex-col items-center">
+              <ChiAnCharacter height={150} state="idle" interactive={false} />
+              <h3 className="text-lg font-bold text-slate-900">Em chưa có buổi phỏng vấn nào được lưu</h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-md leading-relaxed">
+                Hãy bắt đầu buổi phỏng vấn giả lập đầu tiên với Chị An để được hỏi câu hỏi thực tế và
+                nhận đánh giá theo chuẩn STAR của nhà tuyển dụng nhé!
+              </p>
               <button
-                onClick={() => setInSession(false)}
-                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                onClick={() => setViewMode('interview')}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
               >
-                Luyện tập lượt phỏng vấn mới cùng Chị An
+                <Mic className="w-3.5 h-3.5" />
+                <span>Bắt đầu phỏng vấn ngay</span>
               </button>
+            </div>
+          ) : (
+            /* Saved Interview Sessions List */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                    Các Buổi Phỏng Vấn Đã Hoàn Thành ({historyList.length})
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Xem lại nhận xét của Chị An và tiếp tục cải thiện câu trả lời
+                  </p>
+                </div>
+                <button
+                  onClick={() => setViewMode('interview')}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Luyện tập buổi mới</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {historyList.map((session) => {
+                  const scoreColor =
+                    session.score >= 80
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : session.score >= 65
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200';
+
+                  const dateFormatted = new Date(session.createdAt).toLocaleDateString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+
+                  return (
+                    <div
+                      key={session.id}
+                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-5 shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div
+                          className={`w-14 h-14 rounded-2xl border flex flex-col items-center justify-center flex-shrink-0 ${scoreColor}`}
+                        >
+                          <span className="text-lg font-black">{session.score}</span>
+                          <span className="text-[9px] font-bold uppercase">Điểm STAR</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-slate-900 text-sm sm:text-base">
+                              {session.position}
+                            </span>
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {session.difficulty}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-slate-600 font-medium flex items-center gap-2">
+                            <Building className="w-3.5 h-3.5 text-blue-600" />
+                            {session.company} • {session.questionCount || session.exchanges.length} câu hỏi
+                          </p>
+
+                          <p className="text-[11px] text-slate-500 line-clamp-1 italic">
+                            "{session.overallVerdict}"
+                          </p>
+
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1 pt-0.5">
+                            <Calendar className="w-3 h-3" />
+                            {dateFormatted}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end md:self-center">
+                        <button
+                          onClick={() => {
+                            setSelectedDetailSession(session);
+                            setIsDetailModalOpen(true);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Xem chi tiết</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleRetakeSession(session)}
+                          className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                          title="Luyện lại vị trí này"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Luyện lại</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteSession(session.id)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Xóa bản ghi"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
       )}
+
+      {/* Detail Modal for Past Interview */}
+      <InterviewDetailModal
+        session={selectedDetailSession}
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        onRetake={handleRetakeSession}
+      />
     </div>
   );
 };

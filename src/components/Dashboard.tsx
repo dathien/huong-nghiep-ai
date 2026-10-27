@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HeroSlider } from './HeroSlider';
 import { ChiAnCard } from './ChiAnMascot';
 import {
@@ -15,9 +15,15 @@ import {
   Layers,
   BookOpen,
   Calendar,
-  ExternalLink
+  ExternalLink,
+  UserCheck,
+  ShieldCheck,
+  LogIn
 } from 'lucide-react';
 import { AppTab, CVData, StudentLevel } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { subscribeUserCVs } from '../services/cvService';
+import { subscribeUserInterviews } from '../services/interviewService';
 
 interface DashboardProps {
   studentLevel: StudentLevel;
@@ -30,6 +36,44 @@ export const Dashboard: React.FC<DashboardProps> = ({
   cvData,
   onNavigateTab,
 }) => {
+  const { currentUser, userAccount, openAuthModal } = useAuth();
+  const [cvCount, setCvCount] = useState<number>(1);
+  const [interviewCount, setInterviewCount] = useState<number>(0);
+  const [bestScore, setBestScore] = useState<number>(0);
+
+  // Sync with user's saved data
+  useEffect(() => {
+    if (!currentUser) {
+      setCvCount(1);
+      setInterviewCount(0);
+      setBestScore(0);
+      return;
+    }
+
+    const unsubCvs = subscribeUserCVs(
+      currentUser.uid,
+      (list) => setCvCount(list.length || 1),
+      () => {}
+    );
+
+    const unsubInterviews = subscribeUserInterviews(
+      currentUser.uid,
+      (list) => {
+        setInterviewCount(list.length);
+        if (list.length > 0) {
+          const maxScore = Math.max(...list.map((s) => s.score));
+          setBestScore(maxScore);
+        }
+      },
+      () => {}
+    );
+
+    return () => {
+      unsubCvs();
+      unsubInterviews();
+    };
+  }, [currentUser]);
+
   // Calculate real profile completion rate
   const calculateProfileScore = () => {
     let score = 20; // Base info
@@ -97,35 +141,135 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8 animate-fade-in">
-      {/* 1. Header Greeting Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Chào bạn! 👋
-            </span>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
-              {studentLevel}
-            </span>
+      {/* 1. Header Greeting Section & Live Account Metrics */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Chào {userAccount?.fullName || currentUser?.displayName || 'bạn'}! 👋
+              </span>
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                {studentLevel}
+              </span>
+              {currentUser && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Tài khoản đã kết nối
+                </span>
+              )}
+            </div>
+            <p className="text-sm sm:text-base font-medium text-slate-600">
+              Hôm nay bạn muốn cùng Chị An chuẩn bị gì cho hành trang tương lai?
+            </p>
           </div>
-          <p className="text-base sm:text-lg font-medium text-slate-600">
-            Hôm nay bạn muốn chuẩn bị gì cho tương lai?
-          </p>
+
+          <div className="flex items-center gap-3">
+            <div className="text-left md:text-right">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                Mức độ sẵn sàng nghề nghiệp
+              </span>
+              <span className="text-lg font-extrabold text-blue-600">
+                {profileScore}% Sẵn sàng
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-full border-4 border-blue-600/20 border-t-blue-600 flex items-center justify-center font-bold text-xs text-blue-600 bg-blue-50">
+              {profileScore}%
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-left md:text-right">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-              Mức độ sẵn sàng nghề nghiệp
-            </span>
-            <span className="text-lg font-extrabold text-blue-600">
-              {profileScore}% Sẵn sàng
-            </span>
+        {/* Dynamic Personal Stats Strip */}
+        <div className="pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div
+            onClick={() => onNavigateTab('cv-builder')}
+            className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200/60 transition-colors cursor-pointer group"
+          >
+            <span className="text-[11px] font-semibold text-slate-500 block">Bản CV đã lưu</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-lg font-extrabold text-slate-900 group-hover:text-blue-600">
+                {cvCount} bản
+              </span>
+              <FileText className="w-4 h-4 text-blue-500" />
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-full border-4 border-blue-600/20 border-t-blue-600 flex items-center justify-center font-bold text-xs text-blue-600 bg-blue-50">
-            {profileScore}%
+
+          <div
+            onClick={() => onNavigateTab('interview-practice')}
+            className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200/60 transition-colors cursor-pointer group"
+          >
+            <span className="text-[11px] font-semibold text-slate-500 block">Buổi phỏng vấn</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-lg font-extrabold text-slate-900 group-hover:text-blue-600">
+                {interviewCount} lượt
+              </span>
+              <Mic className="w-4 h-4 text-purple-500" />
+            </div>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('interview-practice')}
+            className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200/60 transition-colors cursor-pointer group"
+          >
+            <span className="text-[11px] font-semibold text-slate-500 block">Điểm STAR cao nhất</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-lg font-extrabold text-emerald-600">
+                {bestScore > 0 ? `${bestScore}/100` : '--/100'}
+              </span>
+              <Award className="w-4 h-4 text-emerald-500" />
+            </div>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('competency-profile')}
+            className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200/60 transition-colors cursor-pointer group"
+          >
+            <span className="text-[11px] font-semibold text-slate-500 block">Hồ sơ năng lực</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-lg font-extrabold text-indigo-600">
+                {profileScore}% hoàn thiện
+              </span>
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+            </div>
           </div>
         </div>
+
+        {/* Guest Banner */}
+        {!currentUser && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center flex-shrink-0 font-bold text-xs">
+                CA
+              </div>
+              <div>
+                <p className="text-xs font-bold text-blue-900">
+                  Đăng nhập để Chị An lưu lại toàn bộ tiến độ, các bản CV và buổi phỏng vấn của em nhé!
+                </p>
+                <p className="text-[11px] text-blue-700">
+                  Dữ liệu được lưu trữ đám mây an toàn, đồng bộ tức thì trên mọi thiết bị.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              <button
+                onClick={() =>
+                  openAuthModal('login', 'Đăng nhập để đồng bộ hồ sơ, lưu CV và xem lịch sử phỏng vấn.')
+                }
+                className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+              >
+                Đăng nhập
+              </button>
+              <button
+                onClick={() =>
+                  openAuthModal('register', 'Tạo tài khoản miễn phí để nhận trọn bộ công cụ hướng nghiệp!')
+                }
+                className="px-3.5 py-1.5 rounded-lg bg-white border border-blue-200 hover:bg-blue-50 text-blue-800 font-bold text-xs cursor-pointer"
+              >
+                Đăng ký
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Hero Slider (5 Chuyên đề Đột phá) */}

@@ -25,10 +25,90 @@ export type AppTab =
   | 'interview-practice'
   | 'career-roadmap';
 
+export type CVTemplateCategory =
+  | 'student'
+  | 'internship'
+  | 'professional'
+  | 'tech'
+  | 'creative'
+  | 'ats';
+
+export type CVTemplateId =
+  // A. HỌC SINH – SINH VIÊN
+  | 'student-starter'
+  | 'student-academic'
+  | 'student-activity'
+  | 'student-modern'
+  // B. THỰC TẬP
+  | 'intern-basic'
+  | 'intern-tech'
+  | 'intern-business'
+  | 'intern-creative'
+  // C. CHUYÊN NGHIỆP
+  | 'pro-elegant'
+  | 'pro-modern'
+  | 'pro-minimalist'
+  | 'pro-executive'
+  // D. CÔNG NGHỆ – KỸ THUẬT
+  | 'tech-developer'
+  | 'tech-technician'
+  | 'tech-engineer'
+  | 'tech-project'
+  // E. SÁNG TẠO
+  | 'creative-design'
+  | 'creative-marketing'
+  | 'creative-media'
+  | 'creative-portfolio'
+  // F. ATS
+  | 'ats-classic'
+  | 'ats-modern'
+  | 'ats-technical'
+  | 'ats-graduate'
+  // Legacy Aliases
+  | 'ats'
+  | 'modern'
+  | 'professional'
+  | 'creative';
+
+export interface CVTemplateMeta {
+  id: CVTemplateId;
+  name: string;
+  category: CVTemplateCategory;
+  categoryName: string;
+  description: string;
+  recommendedFor: string;
+  targetUserLevels: StudentLevel[];
+  layoutType: 'single-column' | 'two-column-left' | 'two-column-right' | 'grid' | 'timeline' | 'compact';
+  defaultThemeColor: string;
+  supportsPhoto: boolean;
+  atsScore: number;
+  badge?: string;
+  features: string[];
+}
+
+export interface CVThemeConfig {
+  primaryColor: string;
+  fontFamily: 'font-sans' | 'font-serif' | 'font-mono' | 'font-vietnam';
+  fontSize: 'compact' | 'standard' | 'relaxed';
+  showPhoto: boolean;
+  photoShape: 'circle' | 'rounded' | 'square';
+  visibleSections: {
+    summary: boolean;
+    skills: boolean;
+    education: boolean;
+    projects: boolean;
+    experience: boolean;
+    activities: boolean;
+    certifications: boolean;
+    achievements: boolean;
+    languages: boolean;
+  };
+}
+
 export interface CVPhoto {
   dataUrl: string;
   originalUrl?: string;
-  shape: 'circle' | 'rounded';
+  shape: 'circle' | 'rounded' | 'square';
   visible: boolean;
   zoom?: number;
   cropX?: number;
