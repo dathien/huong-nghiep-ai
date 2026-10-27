@@ -76,6 +76,36 @@ const DEGREE_LEVELS = [
   'Khác',
 ];
 
+interface ParsedDate {
+  month: number;
+  year: number;
+}
+
+const parseMMYYYY = (val: string): { parsed?: ParsedDate; error?: string } => {
+  const trimmed = val.trim();
+  if (!trimmed) {
+    return { error: 'Vui lòng nhập thời gian theo định dạng MM/YYYY.' };
+  }
+
+  const match = trimmed.match(/^(\d{1,2})\/(\d{4})$/);
+  if (!match) {
+    return { error: 'Định dạng thời gian phải là MM/YYYY (Ví dụ: 09/2022).' };
+  }
+
+  const month = parseInt(match[1], 10);
+  const year = parseInt(match[2], 10);
+
+  if (month < 1 || month > 12) {
+    return { error: 'Tháng không hợp lệ (phải từ 01 đến 12).' };
+  }
+
+  if (year < 1950 || year > 2100) {
+    return { error: 'Năm không hợp lệ (phải từ 1950 đến 2100).' };
+  }
+
+  return { parsed: { month, year } };
+};
+
 export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   cvData,
   setCvData,
@@ -119,6 +149,8 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   // Form states
   // 1. Education
   const [editingEduId, setEditingEduId] = useState<string | null>(null);
+  const [eduStartDateError, setEduStartDateError] = useState<string | null>(null);
+  const [eduEndDateError, setEduEndDateError] = useState<string | null>(null);
   const [eduForm, setEduForm] = useState<Omit<CompetencyEducation, 'id'>>({
     school: '',
     degreeLevel: studentLevel || 'Sinh viên đại học',
@@ -275,6 +307,8 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
     });
     setEduCourseworkInput('');
     setEduAchievementsInput('');
+    setEduStartDateError(null);
+    setEduEndDateError(null);
     setFormValidationError(null);
     setActiveFormSection('education');
     scrollToForm();
@@ -282,19 +316,24 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
 
   const handleOpenEditEdu = (edu: CompetencyEducation) => {
     setEditingEduId(edu.id);
+    const isCurrentlyStudying = Boolean(edu.isCurrent || edu.endDate === 'Đang học');
+    const cleanEndDate = edu.endDate === 'Đang học' ? '' : (edu.endDate || '');
+
     setEduForm({
       school: edu.school,
       degreeLevel: edu.degreeLevel,
       major: edu.major || '',
-      startDate: edu.startDate,
-      endDate: edu.endDate,
-      isCurrent: edu.isCurrent ?? (edu.endDate === 'Đang học'),
+      startDate: edu.startDate || '',
+      endDate: cleanEndDate,
+      isCurrent: isCurrentlyStudying,
       gpa: edu.gpa || '',
       coursework: edu.coursework || [],
       achievements: edu.achievements || [],
     });
     setEduCourseworkInput((edu.coursework || []).join(', '));
     setEduAchievementsInput((edu.achievements || []).join('\n'));
+    setEduStartDateError(null);
+    setEduEndDateError(null);
     setFormValidationError(null);
     setActiveFormSection('education');
     scrollToForm();
@@ -302,9 +341,60 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
 
   const handleSaveEdu = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!eduForm.school.trim()) {
       setFormValidationError('Vui lòng nhập tên trường / cơ sở đào tạo.');
       return;
+    }
+
+    // 1. Validate Start Date
+    const startRes = parseMMYYYY(eduForm.startDate);
+    if (startRes.error) {
+      setEduStartDateError(startRes.error);
+      return;
+    }
+    setEduStartDateError(null);
+    const startMonth = startRes.parsed!.month;
+    const startYear = startRes.parsed!.year;
+    const normalizedStartDate = `${String(startMonth).padStart(2, '0')}/${startYear}`;
+
+    // 2. Validate End Date
+    let normalizedEndDate = eduForm.endDate.trim();
+    if (eduForm.isCurrent) {
+      // Currently studying: end date is optional, preserves typed MM/YYYY or defaults to 'Đang học'
+      if (normalizedEndDate && normalizedEndDate !== 'Đang học') {
+        const endRes = parseMMYYYY(normalizedEndDate);
+        if (!endRes.error) {
+          normalizedEndDate = `${String(endRes.parsed!.month).padStart(2, '0')}/${endRes.parsed!.year}`;
+        }
+      } else {
+        normalizedEndDate = 'Đang học';
+      }
+      setEduEndDateError(null);
+    } else {
+      // Not studying: end date is required and must be valid MM/YYYY
+      if (!normalizedEndDate || normalizedEndDate === 'Đang học') {
+        setEduEndDateError('Vui lòng nhập thời gian kết thúc (MM/YYYY) khi đã hoàn thành hoặc không còn theo học.');
+        return;
+      }
+      const endRes = parseMMYYYY(normalizedEndDate);
+      if (endRes.error) {
+        setEduEndDateError(endRes.error);
+        return;
+      }
+
+      const endMonth = endRes.parsed!.month;
+      const endYear = endRes.parsed!.year;
+      normalizedEndDate = `${String(endMonth).padStart(2, '0')}/${endYear}`;
+
+      // Check Start Date <= End Date
+      const startMonths = startYear * 12 + startMonth;
+      const endMonths = endYear * 12 + endMonth;
+      if (startMonths > endMonths) {
+        setEduEndDateError('Thời gian bắt đầu không được sau thời gian kết thúc.');
+        return;
+      }
+      setEduEndDateError(null);
     }
 
     const coursework = eduCourseworkInput
@@ -317,15 +407,13 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const endDate = eduForm.isCurrent ? 'Đang học' : eduForm.endDate.trim() || 'Hiện tại';
-
     const newEduItem: CompetencyEducation = {
       id: editingEduId || `edu_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       school: eduForm.school.trim(),
       degreeLevel: eduForm.degreeLevel,
       major: eduForm.major?.trim() || undefined,
-      startDate: eduForm.startDate.trim() || 'N/A',
-      endDate,
+      startDate: normalizedStartDate,
+      endDate: normalizedEndDate,
       isCurrent: eduForm.isCurrent,
       gpa: eduForm.gpa?.trim() || undefined,
       coursework: coursework.length > 0 ? coursework : undefined,
@@ -353,6 +441,8 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
       setActiveFormSection(null);
       setEditingEduId(null);
       setFormValidationError(null);
+      setEduStartDateError(null);
+      setEduEndDateError(null);
     }
   };
 
@@ -662,14 +752,23 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
   const handleConfirmSyncToCv = () => {
     setCvData((prev) => {
       // 1. Education conversion
-      const newEducations = profile.education.map((edu) => ({
-        school: edu.school,
-        degree: edu.degreeLevel,
-        major: edu.major || (edu.degreeLevel === 'Học sinh THPT' ? 'Chung' : 'Chuyên ngành'),
-        year: edu.isCurrent ? `${edu.startDate} - Đang học` : `${edu.startDate} - ${edu.endDate}`,
-        gpa: edu.gpa || undefined,
-        coursework: edu.coursework || [],
-      }));
+      const newEducations = profile.education.map((edu) => {
+        const isStudying = Boolean(edu.isCurrent || edu.endDate === 'Đang học');
+        const startDisplay = edu.startDate?.trim() || 'N/A';
+        const endDisplay = isStudying
+          ? 'Hiện tại'
+          : (edu.endDate && edu.endDate !== 'Đang học' ? edu.endDate.trim() : 'Hiện tại');
+        const yearFormatted = `${startDisplay} – ${endDisplay}`;
+
+        return {
+          school: edu.school,
+          degree: edu.degreeLevel,
+          major: edu.major || (edu.degreeLevel === 'Học sinh THPT' ? 'Chung' : 'Chuyên ngành'),
+          year: yearFormatted,
+          gpa: edu.gpa || undefined,
+          coursework: edu.coursework || [],
+        };
+      });
 
       // 2. Skills conversion
       const techSkills = profile.skills.filter((s) => s.category === 'technical').map((s) => s.name);
@@ -1230,39 +1329,156 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
                     />
                   </div>
 
+                  {/* Start Date */}
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Thời gian bắt đầu:</label>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Thời gian bắt đầu <span className="text-rose-500">*</span>:
+                    </label>
                     <input
                       type="text"
+                      required
                       value={eduForm.startDate}
-                      onChange={(e) => setEduForm({ ...eduForm, startDate: e.target.value })}
-                      placeholder="VD: 09/2022"
-                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEduForm({ ...eduForm, startDate: val });
+                        if (eduStartDateError) {
+                          const res = parseMMYYYY(val);
+                          if (!res.error) setEduStartDateError(null);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val) {
+                          const res = parseMMYYYY(val);
+                          if (res.error) {
+                            setEduStartDateError(res.error);
+                          } else {
+                            setEduStartDateError(null);
+                          }
+                        }
+                      }}
+                      placeholder="MM/YYYY (VD: 09/2022)"
+                      className={`w-full bg-white border rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 shadow-2xs transition-colors ${
+                        eduStartDateError
+                          ? 'border-rose-400 focus:ring-rose-400'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     />
+                    {eduStartDateError && (
+                      <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1 animate-fade-in">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{eduStartDateError}</span>
+                      </p>
+                    )}
+                    {!eduStartDateError && (
+                      <p className="text-[11px] text-slate-400 mt-1">Định dạng: MM/YYYY (Ví dụ: 09/2022)</p>
+                    )}
                   </div>
 
+                  {/* End Date */}
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Thời gian kết thúc:</label>
-                    <input
-                      type="text"
-                      disabled={eduForm.isCurrent}
-                      value={eduForm.isCurrent ? 'Đang học' : eduForm.endDate}
-                      onChange={(e) => setEduForm({ ...eduForm, endDate: e.target.value })}
-                      placeholder="VD: 06/2026"
-                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 shadow-2xs"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-700 block">
+                        Thời gian kết thúc:
+                        {eduForm.isCurrent ? (
+                          <span className="ml-1.5 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                            Đang học (không bắt buộc)
+                          </span>
+                        ) : (
+                          <span className="text-rose-500 ml-0.5">*</span>
+                        )}
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        disabled={eduForm.isCurrent}
+                        value={eduForm.isCurrent ? 'Đang học' : (eduForm.endDate === 'Đang học' ? '' : eduForm.endDate)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEduForm({ ...eduForm, endDate: val });
+                          if (eduEndDateError) {
+                            const res = parseMMYYYY(val);
+                            if (!res.error) setEduEndDateError(null);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val && !eduForm.isCurrent) {
+                            const res = parseMMYYYY(val);
+                            if (res.error) {
+                              setEduEndDateError(res.error);
+                            } else {
+                              const startRes = parseMMYYYY(eduForm.startDate);
+                              if (!startRes.error) {
+                                const startMonths = startRes.parsed!.year * 12 + startRes.parsed!.month;
+                                const endMonths = res.parsed!.year * 12 + res.parsed!.month;
+                                if (startMonths > endMonths) {
+                                  setEduEndDateError('Thời gian bắt đầu không được sau thời gian kết thúc.');
+                                  return;
+                                }
+                              }
+                              setEduEndDateError(null);
+                            }
+                          }
+                        }}
+                        placeholder="MM/YYYY (VD: 06/2026)"
+                        className={`w-full border rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 shadow-2xs transition-colors ${
+                          eduEndDateError
+                            ? 'border-rose-400 focus:ring-rose-400'
+                            : 'border-slate-300 focus:ring-blue-500'
+                        } ${
+                          eduForm.isCurrent
+                            ? 'bg-slate-100 text-blue-700 font-bold cursor-not-allowed border-slate-200 select-none'
+                            : 'bg-white'
+                        }`}
+                      />
+                    </div>
+                    {eduEndDateError && (
+                      <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1 animate-fade-in">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{eduEndDateError}</span>
+                      </p>
+                    )}
+                    {eduForm.isCurrent && eduForm.endDate && eduForm.endDate !== 'Đang học' && (
+                      <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                        <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span>Đã lưu mốc dự kiến: <strong>{eduForm.endDate}</strong>. Bỏ chọn để mở khóa chỉnh sửa.</span>
+                      </p>
+                    )}
+                    {!eduForm.isCurrent && !eduEndDateError && (
+                      <p className="text-[11px] text-slate-400 mt-1">Định dạng: MM/YYYY (Ví dụ: 06/2026)</p>
+                    )}
                   </div>
                 </div>
 
                 {/* Checkbox currently studying */}
-                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <label className="flex items-center gap-2 cursor-pointer pt-1 group">
                   <input
                     type="checkbox"
                     checked={eduForm.isCurrent}
-                    onChange={(e) => setEduForm({ ...eduForm, isCurrent: e.target.checked })}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEduForm((prev) => ({
+                        ...prev,
+                        isCurrent: checked,
+                      }));
+                      if (checked) {
+                        setEduEndDateError(null);
+                      } else {
+                        if (eduForm.endDate && eduForm.endDate !== 'Đang học') {
+                          const res = parseMMYYYY(eduForm.endDate);
+                          if (res.error) {
+                            setEduEndDateError(res.error);
+                          } else {
+                            setEduEndDateError(null);
+                          }
+                        }
+                      }
+                    }}
                     className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                   />
-                  <span className="text-xs text-slate-800 font-semibold">
+                  <span className="text-xs text-slate-800 font-semibold group-hover:text-blue-700 transition-colors">
                     Hiện đang theo học tại cơ sở đào tạo này
                   </span>
                 </label>
@@ -1405,7 +1621,7 @@ export const CompetencyProfile: React.FC<CompetencyProfileProps> = ({
                               )}
                               <span className="text-xs text-slate-500 flex items-center gap-1">
                                 <Calendar className="w-3 h-3 text-slate-400" />
-                                <span>{edu.isCurrent ? `${edu.startDate} – Đang học` : `${edu.startDate} – ${edu.endDate}`}</span>
+                                <span>{edu.isCurrent || edu.endDate === 'Đang học' ? `${edu.startDate} – Đang học` : `${edu.startDate} – ${edu.endDate}`}</span>
                               </span>
                             </div>
 
